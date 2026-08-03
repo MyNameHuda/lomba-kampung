@@ -137,7 +137,7 @@ export default function LombaClient({ initial, kats, counts }: { initial: Lomba[
 
   return (
     <>
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-center mb-4">
         <button onClick={() => { setEditing(null); setCreating(true); }} className="btn btn-primary btn-sm">
           <i className="fas fa-plus"></i> Tambah Lomba
         </button>

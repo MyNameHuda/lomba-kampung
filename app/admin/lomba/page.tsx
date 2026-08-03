@@ -24,7 +24,7 @@ export default async function LombaAdminPage() {
         </Link>
       }
     >
-      <p className="text-[13px] text-[#6B7280] mb-4">Kelola lomba: tambah, edit, hapus, atau ubah status (aktif/selesai).</p>
+      <p className="text-[13px] text-[#6B7280] mb-4 text-center">Kelola lomba: tambah, edit, hapus, atau ubah status (aktif/selesai).</p>
       <LombaClient initial={rows} kats={kats.map((k) => ({ id: k.id, nama: k.nama }))} counts={counts} />
     </AdminShell>
   );
