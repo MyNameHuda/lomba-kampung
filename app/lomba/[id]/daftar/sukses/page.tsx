@@ -1,5 +1,6 @@
 import { getPendaftarByNomor, getLombaById, getKategori } from "@/lib/db";
 import Link from "next/link";
+import PrintButton from "./print-button";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -80,9 +81,7 @@ async function SuksesContent({ searchParamsPromise }: { searchParamsPromise: Pro
         </div>
 
         <div className="flex gap-2.5 w-full max-w-[340px] my-5">
-          <button onClick={() => window.print()} className="btn btn-primary flex-1">
-            <i className="fas fa-download"></i> Simpan Kartu
-          </button>
+          <PrintButton />
         </div>
 
         <Link href="/" className="btn btn-ghost">
