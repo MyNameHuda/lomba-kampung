@@ -4,6 +4,7 @@ import { getLombaById, getPendaftarByLomba, getKategori, groupPendaftarForLomba 
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function PesertaDetailPage({ params }: { params: Promise<{ lombaId: string }> }) {
   const { lombaId } = await params;

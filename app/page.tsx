@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function PublicHome() {
   const [cfg, rows, kats, session] = await Promise.all([

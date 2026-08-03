@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getInitials } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function LombaDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

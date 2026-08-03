@@ -3,6 +3,7 @@ import InputManualClient from "./input-manual-client";
 import { getLomba, getKategori, getPendaftar } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function InputManualPage() {
   const lomList = await getLomba(true);

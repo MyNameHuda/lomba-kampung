@@ -3,6 +3,7 @@ import PengaturanClient from "./pengaturan-client";
 import { getSettings, getKategori } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function PengaturanPage() {
   const s = await getSettings();
