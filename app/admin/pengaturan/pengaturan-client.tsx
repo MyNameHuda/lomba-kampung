@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useNotify } from "@/components/notify-provider";
 
@@ -38,14 +38,12 @@ export default function PengaturanClient({
   const router = useRouter();
   const notify = useNotify();
   const [tab, setTab] = useState<"profil" | "password" | "kategori" | "data" | "tentang">("profil");
-  const [kats, setKats] = useState(kategori);
+  // Use prop directly as the source of truth — no local state mirror.
+  // Earlier `useEffect(() => setKats(kategori), [kategori])` could race with optimistic
+  // local updates and cause a "deleted kategori reappears" bug.
+  const kats = kategori;
   const [editing, setEditing] = useState<Kat | null>(null);
   const [showModal, setShowModal] = useState(false);
-
-  // Sync with server-rendered prop after router.refresh()
-  useEffect(() => {
-    setKats(kategori);
-  }, [kategori]);
 
   // Settings form
   const [appName, setAppName] = useState(settings?.appName || "Lomba Kampung");
@@ -124,12 +122,7 @@ export default function PengaturanClient({
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Gagal");
-      if (isNew) {
-        const newKat: Kat = { id: json.id, nama: data.nama, icon: data.icon, min: data.min, max: data.max, urutan: kats.length + 1, autoAge: data.autoAge };
-        setKats((prev) => [...prev, newKat].sort((a, b) => a.min - b.min));
-      } else {
-        setKats((prev) => prev.map((k) => (k.id === data.id ? { ...k, ...data } as Kat : k)).sort((a, b) => a.min - b.min));
-      }
+      // No local setKats — let router.refresh() update the prop from server
       setShowModal(false);
       setEditing(null);
       router.refresh();
@@ -150,7 +143,7 @@ export default function PengaturanClient({
     try {
       const res = await fetch(`/api/admin/kategori?id=${encodeURIComponent(id)}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
-      setKats((prev) => prev.filter((k) => k.id !== id));
+      // No local setKats — let router.refresh() update the prop from server
       router.refresh();
       notify.success(`Kategori "${nama}" berhasil dihapus`);
     } catch {
