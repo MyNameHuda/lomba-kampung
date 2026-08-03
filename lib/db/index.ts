@@ -416,11 +416,17 @@ export async function createPendaftar(
   }
 ): Promise<{ id: number; nomor: string }> {
   const year = new Date().getFullYear();
-  const countRow = await get<{ c: number }>(
-    "SELECT COUNT(*) as c FROM pendaftar WHERE substr(nomor, 1, 4) = ?",
-    `LMB-${year}`
+  // Use MAX of numeric suffix (cast to INTEGER) for the safest auto-increment.
+  // Avoids: (1) substr-length bug from before, (2) gap if some rows were
+  // rejected/deleted, (3) double-counting from manual inserts.
+  const maxRow = await get<{ m: number | null }>(
+    `SELECT MAX(CAST(substr(nomor, 9) AS INTEGER)) as m
+     FROM pendaftar
+     WHERE nomor LIKE ?`,
+    `LMB-${year}-%`
   );
-  const nomor = `LMB-${year}-${String((countRow?.c ?? 0) + 1).padStart(4, "0")}`;
+  const nextNum = (maxRow?.m ?? 0) + 1;
+  const nomor = `LMB-${year}-${String(nextNum).padStart(4, "0")}`;
   const result = await run(
     `INSERT INTO pendaftar (nomor, nama, no_wa, jenis_kelamin, kategori_id, umur, lomba_id, status, sumber, hadir)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
