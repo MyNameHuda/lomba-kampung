@@ -214,7 +214,7 @@ export default function LombaClient({ initial, kats, counts }: { initial: Lomba[
               );
             })}
             {items.length === 0 && (
-              <tr><td colSpan={5} className="text-center py-8 text-[#6B7280]">Belum ada lomba. Klik "Tambah Lomba" untuk mulai.</td></tr>
+              <tr><td colSpan={5} className="text-center py-8 text-[#6B7280] empty-state-cell">Belum ada lomba. Klik "Tambah Lomba" untuk mulai.</td></tr>
             )}
           </tbody>
         </table>

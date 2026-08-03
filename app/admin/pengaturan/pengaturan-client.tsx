@@ -351,7 +351,7 @@ export default function PengaturanClient({
                     </tr>
                   ))}
                   {kats.length === 0 && (
-                    <tr><td colSpan={5} className="text-center py-6 text-[#6B7280]">Belum ada kategori.</td></tr>
+                    <tr><td colSpan={5} className="text-center py-6 text-[#6B7280] empty-state-cell">Belum ada kategori.</td></tr>
                   )}
                 </tbody>
               </table>
