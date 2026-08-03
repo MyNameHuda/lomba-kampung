@@ -20,11 +20,13 @@ function resolveDbUrl(rawUrl: string | undefined): string {
   if (!rawUrl) {
     return `file:${path.join(process.cwd(), "lomba.db")}`;
   }
-  if (rawUrl.startsWith("libsql://") || rawUrl.startsWith("https://") || rawUrl === ":memory:") {
-    return rawUrl;
+  // Strip BOM + any other invisible whitespace that Vercel/PowerShell might inject
+  const url = rawUrl.replace(/^[\uFEFF\u200B-\u200D\u2060\u00A0\s]+/, "").trim();
+  if (url.startsWith("libsql://") || url.startsWith("https://") || rawUrl === ":memory:") {
+    return url;
   }
-  if (rawUrl.startsWith("file:")) {
-    const rest = rawUrl.slice("file:".length);
+  if (url.startsWith("file:")) {
+    const rest = url.slice("file:".length);
     // Already absolute (file:/abs or file:///abs)
     if (rest.startsWith("/") || rest.startsWith("\\")) {
       return `file:${rest}`;
@@ -34,7 +36,7 @@ function resolveDbUrl(rawUrl: string | undefined): string {
     return `file:${abs}`;
   }
   // Bare path
-  return `file:${path.resolve(process.cwd(), rawUrl)}`;
+  return `file:${path.resolve(process.cwd(), url)}`;
 }
 
 function getClient(): Client {
