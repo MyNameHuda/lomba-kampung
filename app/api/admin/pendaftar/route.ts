@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createPendaftar, getLombaById } from "@/lib/db";
 import { z } from "zod";
 import { isAuthenticated } from "@/lib/auth";
@@ -33,6 +34,11 @@ export async function POST(req: Request) {
       hadir: data.hadir ?? false,
       status: "disetujui",
     });
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/approval");
+    revalidatePath("/admin/peserta");
+    revalidatePath(`/admin/peserta/${data.lombaId}`);
 
     return NextResponse.json({ ok: true, nomor: result.nomor });
   } catch (e) {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { updateLomba, deleteLomba, getLombaById, setLombaKategori } from "@/lib/db";
 import { isAuthenticated } from "@/lib/auth";
 import { z } from "zod";
@@ -64,6 +65,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         pjKontak: p.pjKontak ?? null,
       })));
     }
+    revalidatePath("/admin");
+    revalidatePath("/admin/lomba");
+    revalidatePath("/");
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof z.ZodError) {
@@ -84,5 +88,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const existing = await getLombaById(idNum);
   if (!existing) return NextResponse.json({ error: "Lomba tidak ditemukan" }, { status: 404 });
   await deleteLomba(idNum);
+  revalidatePath("/admin");
+  revalidatePath("/admin/lomba");
+  revalidatePath("/");
   return NextResponse.json({ ok: true });
 }

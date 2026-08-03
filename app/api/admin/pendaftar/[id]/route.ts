@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { updatePendaftar, deletePendaftar } from "@/lib/db";
 import { z } from "zod";
 import { isAuthenticated } from "@/lib/auth";
@@ -26,6 +27,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (data.hadir !== undefined) updates.hadir = data.hadir;
     if (data.kategoriOverride !== undefined) updates.kategoriId = data.kategoriOverride;
     await updatePendaftar(idNum, updates);
+    // Invalidate all admin pages that show pendaftar counts/derived data
+    revalidatePath("/admin");
+    revalidatePath("/admin/approval");
+    revalidatePath("/admin/peserta");
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof z.ZodError) {
@@ -44,5 +49,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const idNum = Number(id);
   if (isNaN(idNum)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   await deletePendaftar(idNum);
+  revalidatePath("/admin");
+  revalidatePath("/admin/approval");
+  revalidatePath("/admin/peserta");
   return NextResponse.json({ ok: true });
 }

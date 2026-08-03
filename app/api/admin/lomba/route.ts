@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createLomba, getLomba, setLombaKategori } from "@/lib/db";
 import { isAuthenticated } from "@/lib/auth";
 import { z } from "zod";
@@ -68,6 +69,9 @@ export async function POST(req: Request) {
       pjNama: p.pjNama,
       pjKontak: p.pjKontak ?? null,
     })));
+    revalidatePath("/admin");
+    revalidatePath("/admin/lomba");
+    revalidatePath("/");
     return NextResponse.json({ ok: true, id });
   } catch (e) {
     if (e instanceof z.ZodError) {

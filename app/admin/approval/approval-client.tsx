@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useNotify } from "@/components/notify-provider";
 import { getInitials, timeAgo, dateFmt } from "@/lib/format";
 
@@ -30,15 +31,20 @@ type Stats = {
 };
 
 export default function ApprovalClient({ initial, stats }: { initial: Item[]; stats: Stats }) {
+  const router = useRouter();
   const notify = useNotify();
   const [items, setItems] = useState(initial);
+  // Local copy of stats so the cards update in real time as the user
+  // approves/rejects, without waiting for the parent server re-render.
+  const [liveStats, setLiveStats] = useState(stats);
   const [busy, setBusy] = useState<number | null>(null);
   const [search, setSearch] = useState("");
 
   // Sync with server-rendered prop after router.refresh()
   useEffect(() => {
     setItems(initial);
-  }, [initial]);
+    setLiveStats(stats);
+  }, [initial, stats]);
 
   // Items list shows ONLY pending — server filters that for us.
   // Status badges are hidden in the row (redundant — every row is pending).
@@ -60,6 +66,14 @@ export default function ApprovalClient({ initial, stats }: { initial: Item[]; st
       if (!res.ok) throw new Error("Gagal");
       // Remove the item from local state — no longer pending
       setItems((prev) => prev.filter((it) => it.id !== id));
+      // Update stats in real time so the cards reflect the change without refresh
+      setLiveStats((prev) => ({
+        ...prev,
+        pending: Math.max(0, prev.pending - 1),
+        [status === "disetujui" ? "disetujui" : "ditolak"]: prev[status === "disetujui" ? "disetujui" : "ditolak"] + 1,
+      }));
+      // Also tell Next.js to re-fetch server data so other pages (dashboard) update
+      router.refresh();
       notify.success(status === "disetujui" ? "Pendaftar disetujui" : "Pendaftar ditolak");
     } catch (e) {
       notify.error("Gagal update status");
@@ -89,6 +103,13 @@ export default function ApprovalClient({ initial, stats }: { initial: Item[]; st
       }
       // All approved → list should be empty (no longer pending)
       setItems([]);
+      // Update stats in real time
+      setLiveStats((prev) => ({
+        ...prev,
+        pending: 0,
+        disetujui: prev.disetujui + count,
+      }));
+      router.refresh();
       notify.success(`${count} pendaftar berhasil disetujui`);
     } catch {
       notify.error("Gagal approve beberapa pendaftar");
@@ -102,19 +123,19 @@ export default function ApprovalClient({ initial, stats }: { initial: Item[]; st
       <div className="stats-grid">
         <div className="stat-card warning">
           <div className="icon"><i className="fas fa-hourglass-half"></i></div>
-          <div><div className="label">Menunggu</div><div className="value">{stats.pending}</div></div>
+          <div><div className="label">Menunggu</div><div className="value">{liveStats.pending}</div></div>
         </div>
         <div className="stat-card success">
           <div className="icon"><i className="fas fa-check"></i></div>
-          <div><div className="label">Disetujui</div><div className="value">{stats.disetujui}</div></div>
+          <div><div className="label">Disetujui</div><div className="value">{liveStats.disetujui}</div></div>
         </div>
         <div className="stat-card primary">
           <div className="icon"><i className="fas fa-times"></i></div>
-          <div><div className="label">Ditolak</div><div className="value">{stats.ditolak}</div></div>
+          <div><div className="label">Ditolak</div><div className="value">{liveStats.ditolak}</div></div>
         </div>
         <div className="stat-card info">
           <div className="icon"><i className="fas fa-users"></i></div>
-          <div><div className="label">Total</div><div className="value">{stats.total}</div></div>
+          <div><div className="label">Total</div><div className="value">{liveStats.total}</div></div>
         </div>
       </div>
 

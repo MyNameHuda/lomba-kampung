@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createPendaftar, getLombaById } from "@/lib/db";
 import { z } from "zod";
 
@@ -33,6 +34,12 @@ export async function POST(req: Request) {
       lombaId: data.lombaId,
       sumber: "publik",
     });
+
+    // Invalidate admin pages so stats update on next navigation
+    revalidatePath("/admin");
+    revalidatePath("/admin/approval");
+    revalidatePath("/admin/peserta");
+    revalidatePath(`/admin/peserta/${data.lombaId}`);
 
     return NextResponse.json({ ok: true, nomor: result.nomor });
   } catch (e) {
