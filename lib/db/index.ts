@@ -211,10 +211,10 @@ export async function updateAdminPassword(newHash: string): Promise<void> {
 // =================== Backup / Reset ===================
 export async function exportAllData(): Promise<{ settings: Settings | null; kategori: Kategori[]; lomba: Lomba[]; pendaftar: Pendaftar[]; exportedAt: string }> {
   const [settings, kategori, lomba, pendaftar] = await Promise.all([
-    await getSettings(),
-    await getKategori(),
-    await getLomba(true),
-    await getPendaftar(),
+    getSettings(),
+    getKategori(),
+    getLomba(true),
+    getPendaftar(),
   ]);
   return {
     settings,
