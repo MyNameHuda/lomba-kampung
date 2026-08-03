@@ -21,7 +21,18 @@ export function middleware(req: NextRequest) {
     }
   }
 
-  return NextResponse.next();
+  // For all dynamic routes, prevent Vercel CDN from caching the response.
+  // Without this, `X-Vercel-Cache: HIT` causes stale data after CRUD ops:
+  // user deletes a kategori, UI updates optimistically, but on reload the
+  // CDN serves the OLD HTML (3 kats instead of 2). The user's edits "vanish".
+  const response = NextResponse.next();
+  response.headers.set(
+    "Cache-Control",
+    "no-store, no-cache, must-revalidate, private"
+  );
+  response.headers.set("Pragma", "no-cache");
+  response.headers.set("Expires", "0");
+  return response;
 }
 
 export const config = {

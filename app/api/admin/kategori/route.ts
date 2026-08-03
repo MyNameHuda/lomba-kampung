@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { upsertKategori, getKategori, deleteKategori } from "@/lib/db";
 import { isAuthenticated } from "@/lib/auth";
 import { z } from "zod";
@@ -28,9 +29,6 @@ export async function POST(req: Request) {
     const body = await req.json();
     const data = schema.parse(body);
     const id = data.id || `k_${Date.now()}`;
-    // Auto-enable autoAge when min >= 18 (Dewasa/Lansia/etc pattern).
-    // Admin can still explicitly set autoAge to override, but the smart default
-    // removes the need to think about it for adult categories.
     const isAdult = data.min >= 18;
     await upsertKategori({
       id,
@@ -41,6 +39,9 @@ export async function POST(req: Request) {
       urutan: data.urutan,
       autoAge: data.autoAge || isAdult,
     });
+    // Invalidate the settings page RSC cache so the next render picks up the new kategori.
+    revalidatePath("/admin/pengaturan");
+    revalidatePath("/");
     return NextResponse.json({ ok: true, id });
   } catch (e) {
     if (e instanceof z.ZodError) {
@@ -59,5 +60,11 @@ export async function DELETE(req: Request) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id wajib" }, { status: 400 });
   await deleteKategori(id);
+  // Invalidate RSC cache for any page that renders this data.
+  revalidatePath("/admin/pengaturan");
+  revalidatePath("/admin/lomba");
+  revalidatePath("/admin/input-manual");
+  revalidatePath("/lomba/[id]", "page");
+  revalidatePath("/");
   return NextResponse.json({ ok: true });
 }
