@@ -2,8 +2,34 @@ node_modules
 .next
 out
 .env*.local
+.env.production
 *.db
 *.db-journal
 .DS_Store
+*.tsbuildinfo
 
 .vercel
+
+# Debug / test artifacts (created during local debugging sessions)
+/check-*.cjs
+/test-*.cjs
+/capture-*.cjs
+/debug-*.cjs
+/inspect-*.cjs
+/verify-*.cjs
+/cleanup-*.cjs
+/cleanup.cjs
+/crud-*.cjs
+/final-shots.cjs
+/fetch-lomba.cjs
+/snap-full.cjs
+/_unused_backup_*/
+/screenshot-*.png
+/crud-*.png
+/realtime-*.png
+/rt2-*.png
+/sukses-page.png
+/daftar-*.png
+/err-*.png
+/stderr.txt
+/stdout.txt
