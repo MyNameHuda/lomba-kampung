@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useNotify } from "@/components/notify-provider";
 
@@ -38,10 +38,22 @@ export default function PengaturanClient({
   const router = useRouter();
   const notify = useNotify();
   const [tab, setTab] = useState<"profil" | "password" | "kategori" | "data" | "tentang">("profil");
-  // Use prop directly as the source of truth — no local state mirror.
-  // Earlier `useEffect(() => setKats(kategori), [kategori])` could race with optimistic
-  // local updates and cause a "deleted kategori reappears" bug.
-  const kats = kategori;
+  // Local state as source of truth for the kategori list.
+  // Initialized from prop on mount; updates via setKats on every action.
+  // `router.refresh()` in Next.js 14 doesn't reliably re-render the prop
+  // when the parent re-fetch returns the same array reference, so we
+  // use local state instead. The `useEffect` re-syncs when the prop's
+  // IDs actually differ (to handle cross-tab/device changes).
+  const [kats, setKats] = useState(kategori);
+  useEffect(() => {
+    // Only sync from prop if the IDs differ (avoid race with optimistic updates)
+    const propIds = kategori.map((k) => k.id).sort().join(",");
+    const localIds = kats.map((k) => k.id).sort().join(",");
+    if (propIds !== localIds) {
+      setKats(kategori);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kategori]);
   const [editing, setEditing] = useState<Kat | null>(null);
   const [showModal, setShowModal] = useState(false);
 
@@ -122,10 +134,14 @@ export default function PengaturanClient({
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Gagal");
-      // No local setKats — let router.refresh() update the prop from server
+      if (isNew) {
+        const newKat: Kat = { id: json.id, nama: data.nama, icon: data.icon, min: data.min, max: data.max, urutan: kats.length + 1, autoAge: data.autoAge };
+        setKats((prev) => [...prev, newKat].sort((a, b) => a.min - b.min));
+      } else {
+        setKats((prev) => prev.map((k) => (k.id === data.id ? { ...k, ...data } as Kat : k)).sort((a, b) => a.min - b.min));
+      }
       setShowModal(false);
       setEditing(null);
-      router.refresh();
       notify.success(isNew ? "Kategori berhasil ditambahkan" : "Kategori berhasil diperbarui");
     } catch (e) {
       notify.error(e instanceof Error ? e.message : "Gagal simpan kategori");
@@ -143,8 +159,7 @@ export default function PengaturanClient({
     try {
       const res = await fetch(`/api/admin/kategori?id=${encodeURIComponent(id)}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
-      // No local setKats — let router.refresh() update the prop from server
-      router.refresh();
+      setKats((prev) => prev.filter((k) => k.id !== id));
       notify.success(`Kategori "${nama}" berhasil dihapus`);
     } catch {
       notify.error("Gagal hapus kategori");
