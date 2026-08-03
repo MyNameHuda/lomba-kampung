@@ -13,13 +13,13 @@ export default async function PesertaDetailPage({ params }: { params: Promise<{ 
   const l = await getLombaById(id);
   if (!l) notFound();
 
-  // Get all approved peserta with full data
-  const allRows = await getPendaftarByLomba(id, "disetujui");
-  const kats = await getKategori();
+  // Parallelize: allRows, kats, groups are all independent after we have `l`
+  const [allRows, kats, groups] = await Promise.all([
+    getPendaftarByLomba(id, "disetujui"),
+    getKategori(),
+    groupPendaftarForLomba(id),
+  ]);
   const katMap = new Map(kats.map((k) => [k.id, k]));
-
-  // Get the section info (key, title, rangeLabel) from groupPendaftarForLomba
-  const groups = await groupPendaftarForLomba(id);
   const sections = groups.sections;
 
   // For each section, build the full AdminGroup with enriched peserta data

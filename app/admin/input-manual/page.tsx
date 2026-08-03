@@ -6,9 +6,12 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function InputManualPage() {
-  const lomList = await getLomba(true);
-  const kats = await getKategori();
-  const allRecent = await getPendaftar();
+  // Parallelize: all 3 independent DB calls
+  const [lomList, kats, allRecent] = await Promise.all([
+    getLomba(true),
+    getKategori(),
+    getPendaftar(),
+  ]);
   const recent = allRecent
     .filter((p) => p.sumber === "manual")
     .slice(0, 5);

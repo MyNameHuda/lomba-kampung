@@ -7,10 +7,11 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function LombaAdminPage() {
-  const rows = await getLomba(true);
-  const kats = await getKategori();
+  // Parallelize: fetch lomba + kategori together, then all counts together
+  const [rows, kats] = await Promise.all([getLomba(true), getKategori()]);
+  const countsArr = await Promise.all(rows.map((l) => countPendaftarByLomba(l.id)));
   const counts: Record<number, number> = {};
-  for (const l of rows) counts[l.id] = await countPendaftarByLomba(l.id);
+  rows.forEach((l, i) => (counts[l.id] = countsArr[i]));
 
   return (
     <AdminShell

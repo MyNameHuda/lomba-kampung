@@ -12,12 +12,16 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function DashboardPage() {
-  const cfg = await getSettings();
-  const lombaAktif = await countLombaAktif();
-  const totalPendaftar = await countAllPendaftar();
-  const pending = await countPendaftarByStatus("pending");
-  const disetujui = await countPendaftarByStatus("disetujui");
-  const lombaWithCount = await getLombaWithCount();
+  // Parallelize all DB calls — each is an HTTP roundtrip to Turso (~100-200ms).
+  // Sequential was 6 × 150ms = ~900ms; parallel = max(150ms) = ~150ms.
+  const [cfg, lombaAktif, totalPendaftar, pending, disetujui, lombaWithCount] = await Promise.all([
+    getSettings(),
+    countLombaAktif(),
+    countAllPendaftar(),
+    countPendaftarByStatus("pending"),
+    countPendaftarByStatus("disetujui"),
+    getLombaWithCount(),
+  ]);
   const topLomba = lombaWithCount.sort((a, b) => b.count - a.count).slice(0, 4);
 
   return (

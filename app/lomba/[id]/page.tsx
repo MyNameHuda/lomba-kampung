@@ -12,9 +12,13 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
   if (isNaN(idNum)) notFound();
   const l = await getLombaById(idNum);
   if (!l || l.status !== "aktif") notFound();
-  const kats = await getKategori();
+
+  // Parallelize: kats and groups are independent after we have `l`
+  const [kats, groups] = await Promise.all([
+    getKategori(),
+    groupPendaftarForLomba(idNum),
+  ]);
   const katMap = new Map(kats.map((k) => [k.id, k]));
-  const groups = await groupPendaftarForLomba(idNum);
   // PJ entries in the order of kategoriEligible (so urutan is predictable)
   const pjEntries = (l.kategoriEligible || [])
     .map((katId) => [katId, l.pjByKategori?.[katId]] as const)
