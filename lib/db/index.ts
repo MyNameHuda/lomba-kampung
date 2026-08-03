@@ -145,11 +145,17 @@ const toCamel = <T>(row: Row | undefined): T | null => {
     const camelKey = k.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
     let val = v;
     if (typeof val === "bigint") val = Number(val);
-    if (typeof camelKey === "string" && camelKey === "kategoriEligible" && typeof val === "string") {
-      try { val = JSON.parse(val); } catch {}
+    if (camelKey === "kategoriEligible") {
+      if (typeof val === "string") {
+        try { val = JSON.parse(val); } catch { val = []; }
+      }
+      if (!Array.isArray(val)) val = [];
     }
-    if (typeof camelKey === "string" && camelKey === "syarat" && typeof val === "string") {
-      try { val = JSON.parse(val); } catch {}
+    if (camelKey === "syarat") {
+      if (typeof val === "string") {
+        try { val = JSON.parse(val); } catch { val = []; }
+      }
+      if (!Array.isArray(val)) val = [];
     }
     if (typeof camelKey === "string" && camelKey === "hadir") {
       val = !!val;

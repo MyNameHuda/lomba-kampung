@@ -63,7 +63,7 @@ export default async function PublicHome() {
         <h2 className="text-base font-bold my-3.5">{rows.length} Lomba Tersedia</h2>
 
         {rows.map((l) => {
-          const tags = (l.kategoriEligible || [])
+          const tags = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
             .map((kid) => katMap.get(kid))
             .filter(Boolean)
             .map((k) => (

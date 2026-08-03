@@ -20,7 +20,7 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
   ]);
   const katMap = new Map(kats.map((k) => [k.id, k]));
   // PJ entries in the order of kategoriEligible (so urutan is predictable)
-  const pjEntries = (l.kategoriEligible || [])
+  const pjEntries = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
     .map((katId) => [katId, l.pjByKategori?.[katId]] as const)
     .filter(([, pj]) => pj != null) as Array<[string, { nama: string; kontak: string | null }]>;
 

@@ -162,7 +162,7 @@ export default function LombaClient({ initial, kats, counts }: { initial: Lomba[
           </thead>
           <tbody>
             {items.map((l) => {
-              const tags = (l.kategoriEligible || [])
+              const tags = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
                 .map((kid) => katMap.get(kid))
                 .filter(Boolean)
                 .map((k) => <span key={k!.id} className={`tag tag-${k!.id.replace("k_", "")}`}>{k!.nama}</span>);

@@ -42,7 +42,7 @@ export async function GET() {
       "PJ per Kategori": pjLines.join(" | ") || "—",
       Status: l.status,
       Urutan: l.urutan,
-      "Kategori Eligible": (l.kategoriEligible || []).map((k) => katMap.get(k)?.nama).filter(Boolean).join("; "),
+      "Kategori Eligible": (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : []).map((k) => katMap.get(k)?.nama).filter(Boolean).join("; "),
       "Syarat": (l.syarat || []).join("; "),
     };
   });
