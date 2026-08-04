@@ -3,7 +3,10 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { KAT_ICON, DEFAULT_KAT_ICON } from "@/lib/constants";
 
+// Local kategori type — needs all fields required for umur range + auto-age logic.
+// Tighter than the generic KategoriSlim (where everything is optional).
 type Kategori = {
   id: string;
   nama: string;
@@ -17,15 +20,6 @@ type Lomba = {
   id: number;
   nama: string;
   emoji: string;
-};
-
-const ICON_MAP: Record<string, string> = {
-  "fa-child": "👶",
-  "fa-user": "🧑",
-  "fa-user-tie": "👨‍💼",
-  "fa-baby": "👶",
-  "fa-user-graduate": "🎓",
-  "fa-person-cane": "🧓",
 };
 
 export default function DaftarForm({ lomba, kategori }: { lomba: Lomba; kategori: Kategori[] }) {
@@ -125,7 +119,7 @@ export default function DaftarForm({ lomba, kategori }: { lomba: Lomba; kategori
                 <div className={`w-9 h-9 rounded-full flex items-center justify-center text-base ${
                   selectedKategori === k.id ? "bg-primary text-white" : "bg-[#F9FAFB] text-[#6B7280]"
                 }`}>
-                  {ICON_MAP[k.icon] || "👤"}
+                  {KAT_ICON[k.icon] || DEFAULT_KAT_ICON}
                 </div>
                 <div className="flex-1">
                   <div className="font-bold">{k.nama}</div>

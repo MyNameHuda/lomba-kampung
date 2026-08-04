@@ -3,43 +3,11 @@
 import { useEffect, useState } from "react";
 import { useNotify } from "@/components/notify-provider";
 import { getInitials } from "@/lib/format";
+import { SECTION_ICON, SECTION_COLOR } from "@/lib/constants";
+import type { AdminGroupKey, AdminGroupData, AdminSection, EligibleKategori, PesertaSlim as Peserta } from "@/lib/types";
 
-type Peserta = {
-  id: number;
-  nomor: string;
-  nama: string;
-  noWa: string | null;
-  umur: number;
-  jenisKelamin: "L" | "P";
-  kategoriId: string;
-  kategori: string;
-  hadir: boolean;
-};
-
-export type AdminGroupKey = "balita" | "anakL" | "anakP" | "dewasa";
-export type AdminGroupData = Record<AdminGroupKey, Peserta[]>;
-
-export type AdminSection = {
-  key: AdminGroupKey;
-  title: string;
-  rangeLabel: string;
-};
-
-export type EligibleKategori = { id: string; nama: string; min: number; max: number };
-
-const ICON: Record<AdminGroupKey, string> = {
-  balita: "fa-baby",
-  anakL: "fa-child",
-  anakP: "fa-child-dress",
-  dewasa: "fa-user-tie",
-};
-
-const COLOR: Record<AdminGroupKey, { bg: string; text: string; border: string }> = {
-  balita: { bg: "bg-[#FDF2F8]", text: "text-[#9D174D]", border: "border-[#FBCFE8]" },
-  anakL:  { bg: "bg-[#EFF6FF]", text: "text-[#1E40AF]", border: "border-[#BFDBFE]" },
-  anakP:  { bg: "bg-[#FDF2F8]", text: "text-[#9D174D]", border: "border-[#FBCFE8]" },
-  dewasa: { bg: "bg-[#FFFBEB]", text: "text-[#92400E]", border: "border-[#FDE68A]" },
-};
+// Re-export so existing imports of AdminGroupKey from this file keep working
+export type { AdminGroupKey, AdminGroupData, AdminSection } from "@/lib/types";
 
 export default function PesertaClient({
   lomba,
@@ -294,11 +262,11 @@ export default function PesertaClient({
         {sections.map((sec) => {
           const data = items[sec.key] || [];
           if (data.length === 0) return null;
-          const c = COLOR[sec.key];
+          const c = SECTION_COLOR[sec.key as keyof typeof SECTION_COLOR];
           return (
             <div key={sec.key} className={`rounded-lg border ${c.bg} ${c.border} overflow-hidden`}>
               <div className={`px-3.5 py-2.5 flex items-center gap-2 text-[12px] font-bold ${c.text}`}>
-                <i className={`fas ${ICON[sec.key]}`}></i>
+                <i className={`fas ${SECTION_ICON[sec.key]}`}></i>
                 <span>{sec.title}</span>
                 <span className="font-normal opacity-70">· {sec.rangeLabel}</span>
                 <span className="ml-auto bg-white/60 px-2 py-0.5 rounded-full text-[11px]">

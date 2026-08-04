@@ -2,36 +2,17 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import { KAT_ICON, DEFAULT_KAT_ICON } from "@/lib/constants";
+import type { KategoriSlim as Kat, LombaSlim as Lomba } from "@/lib/types";
 
-type Kat = {
-  id: string;
-  nama: string;
-  icon?: string;
-  colorBg?: string;
-  colorText?: string;
-  colorBorder?: string;
-};
-
-type Lomba = {
-  id: number;
-  nama: string;
-  emoji: string;
-  kategoriEligible: string[];
+// Lomba with admin stats (extends slim shape)
+type LombaWithStats = Lomba & {
   total: number;
   disetujui: number;
   hadir: number;
 };
 
-const KAT_ICON: Record<string, string> = {
-  "fa-child": "👶",
-  "fa-user": "🧑",
-  "fa-user-tie": "👨‍💼",
-  "fa-baby": "👶",
-  "fa-user-graduate": "🎓",
-  "fa-person-cane": "🧓",
-};
-
-export default function PesertaListClient({ lomba, kategori }: { lomba: Lomba[]; kategori: Kat[] }) {
+export default function PesertaListClient({ lomba, kategori }: { lomba: LombaWithStats[]; kategori: Kat[] }) {
   const [activeKat, setActiveKat] = useState<string | null>(null);
 
   // Build map for fast lookup
@@ -115,7 +96,7 @@ export default function PesertaListClient({ lomba, kategori }: { lomba: Lomba[];
                   }
                 }}
               >
-                <span>{KAT_ICON[k.icon || "fa-user"] || "👤"}</span> {k.nama} ({count})
+                <span>{KAT_ICON[k.icon || "fa-user"] || DEFAULT_KAT_ICON}</span> {k.nama} ({count})
               </button>
             );
           })}

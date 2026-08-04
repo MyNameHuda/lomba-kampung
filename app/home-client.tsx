@@ -3,33 +3,8 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import KatTag from "@/components/kat-tag";
-
-type Lomba = {
-  id: number;
-  nama: string;
-  emoji: string;
-  deskripsi: string | null;
-  kategoriEligible: string[];
-  count: number;
-};
-
-type Kat = {
-  id: string;
-  nama: string;
-  icon?: string;
-  colorBg?: string;
-  colorText?: string;
-  colorBorder?: string;
-};
-
-const KAT_ICON: Record<string, string> = {
-  "fa-child": "👶",
-  "fa-user": "🧑",
-  "fa-user-tie": "👨‍💼",
-  "fa-baby": "👶",
-  "fa-user-graduate": "🎓",
-  "fa-person-cane": "🧓",
-};
+import { KAT_ICON, DEFAULT_KAT_ICON } from "@/lib/constants";
+import type { LombaSlim as Lomba, KategoriSlim as Kat } from "@/lib/types";
 
 export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; kategori: Kat[] }) {
   const [activeKat, setActiveKat] = useState<string | null>(null);
@@ -123,7 +98,7 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
                   }
                 }}
               >
-                <span>{KAT_ICON[k.icon || "fa-user"] || "👤"}</span> {k.nama} ({count})
+                <span>{KAT_ICON[k.icon || "fa-user"] || DEFAULT_KAT_ICON}</span> {k.nama} ({count})
               </button>
             );
           })}

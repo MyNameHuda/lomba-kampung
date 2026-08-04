@@ -2,6 +2,7 @@ import { getLombaById, getKategori, groupPendaftarForLomba, type DisplaySection 
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getInitials } from "@/lib/format";
+import { SECTION_ICON } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -131,7 +132,7 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
                   title={sec.title}
                   icon={SECTION_ICON[sec.key]}
                   ageRange={sec.rangeLabel}
-                  color={SECTION_COLOR[sec.key]}
+                  color={sec.key}
                   data={sec.peserta}
                 />
               ))}
@@ -149,18 +150,12 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
   );
 }
 
-const SECTION_ICON: Record<DisplaySection["key"], string> = {
-  balita: "fa-baby",
-  anakL: "fa-child",
-  anakP: "fa-child-dress",
-  dewasa: "fa-user-tie",
-};
-
-const SECTION_COLOR: Record<DisplaySection["key"], "pink" | "blue" | "amber"> = {
-  balita: "pink",
-  anakL: "blue",
-  anakP: "pink",
-  dewasa: "amber",
+// Section keys with matching tailwind color classes (combines bg/text/border)
+const SECTION_COLOR_CLASS: Record<DisplaySection["key"], string> = {
+  balita: "bg-[#FDF2F8] text-[#9D174D] border-[#FBCFE8]",
+  anakL: "bg-[#EFF6FF] text-[#1E40AF] border-[#BFDBFE]",
+  anakP: "bg-[#FDF2F8] text-[#9D174D] border-[#FBCFE8]",
+  dewasa: "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]",
 };
 
 function PesertaTable({
@@ -173,17 +168,11 @@ function PesertaTable({
   title: string;
   icon: string;
   ageRange: string;
-  color: "pink" | "blue" | "amber";
+  color: DisplaySection["key"];
   data: { nama: string; umur: number }[];
 }) {
-  const colorClass: Record<typeof color, string> = {
-    pink: "bg-[#FDF2F8] text-[#9D174D] border-[#FBCFE8]",
-    blue: "bg-[#EFF6FF] text-[#1E40AF] border-[#BFDBFE]",
-    amber: "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]",
-  };
-
   return (
-    <div className={`rounded-lg border ${colorClass[color]} overflow-hidden`}>
+    <div className={`rounded-lg border ${SECTION_COLOR_CLASS[color]} overflow-hidden`}>
       <div className="px-3.5 py-2.5 flex items-center gap-2 text-[12px] font-bold">
         <i className={`fas ${icon}`}></i>
         <span>{title}</span>
