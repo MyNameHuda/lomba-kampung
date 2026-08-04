@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     revalidatePath("/admin/peserta");
     revalidatePath(`/admin/peserta/${data.lombaId}`);
 
-    return NextResponse.json({ ok: true, nomor: result.nomor });
+    return NextResponse.json({ ok: true, id: result.id, nomor: result.nomor });
   } catch (e) {
     if (e instanceof z.ZodError) {
       return NextResponse.json({ error: "Data tidak valid", details: e.issues }, { status: 400 });
