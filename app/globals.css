@@ -91,7 +91,7 @@
 /* Diffuse background — layered webp image + soft teal gradients for readability */
 .diffuse-bg {
   background:
-    linear-gradient(160deg, rgba(245, 251, 252, 0.82) 0%, rgba(230, 244, 246, 0.78) 50%, rgba(236, 247, 248, 0.82) 100%),
+    linear-gradient(160deg, rgba(245, 251, 252, 0.45) 0%, rgba(230, 244, 246, 0.40) 50%, rgba(236, 247, 248, 0.45) 100%),
     url("/bg/festive-bg.webp") center / cover no-repeat fixed;
   background-attachment: fixed, fixed;
   min-height: 100vh;
@@ -100,7 +100,7 @@
 /* Admin variant — more subtle pattern */
 .surface-admin {
   background:
-    linear-gradient(160deg, rgba(245, 251, 252, 0.88) 0%, rgba(220, 240, 240, 0.85) 100%),
+    linear-gradient(160deg, rgba(245, 251, 252, 0.55) 0%, rgba(220, 240, 240, 0.50) 100%),
     url("/bg/admin-bg.webp") center / cover no-repeat fixed;
   background-attachment: fixed, fixed;
   min-height: 100vh;
@@ -109,7 +109,7 @@
 /* Public landing hero — bigger glow */
 .surface-hero {
   background:
-    linear-gradient(160deg, rgba(245, 251, 252, 0.78) 0%, rgba(230, 244, 246, 0.72) 50%, rgba(236, 247, 248, 0.78) 100%),
+    linear-gradient(160deg, rgba(245, 251, 252, 0.40) 0%, rgba(230, 244, 246, 0.35) 50%, rgba(236, 247, 248, 0.40) 100%),
     url("/bg/hero-bg.webp") center / cover no-repeat fixed;
   background-attachment: fixed, fixed;
   min-height: 100vh;
@@ -269,7 +269,7 @@
 .row-actions { display: flex; gap: 6px; }
 
 /* Mobile page styles */
-.mobile-page { min-height: 100vh; background: #f5fbfc; display: flex; flex-direction: column; }
+.mobile-page { min-height: 100vh; display: flex; flex-direction: column; }
 .app-header {
   background: linear-gradient(135deg, #3aafb9 0%, #093a3e 100%);
   color: white; padding: 18px 20px; display: flex; align-items: center; justify-content: space-between;
@@ -318,7 +318,7 @@
 .bottom-nav-item.active { color: #3aafb9; }
 
 /* Form page */
-.form-page { min-height: 100vh; background: #f5fbfc; display: flex; flex-direction: column; }
+.form-page { min-height: 100vh; display: flex; flex-direction: column; }
 .form-header {
   background: linear-gradient(135deg, #3aafb9 0%, #093a3e 100%); color: white;
   padding: 18px 20px; display: flex; align-items: center; gap: 14px;
