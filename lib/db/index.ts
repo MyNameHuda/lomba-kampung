@@ -373,8 +373,8 @@ export async function updateLomba(id: number, updates: Partial<Omit<Lomba, "id" 
   const sets: string[] = [];
   const vals: (string | number | null)[] = [];
   for (const [k, v] of Object.entries(updates)) {
-    if (k === "syarat") { sets.push("syarat = ?"); vals.push(v as string | number); }
-    else if (k === "kategoriEligible") { sets.push("kategori_eligible = ?"); vals.push(v as string | number); }
+    if (k === "syarat") { sets.push("syarat = ?"); vals.push(JSON.stringify(v)); }
+    else if (k === "kategoriEligible") { sets.push("kategori_eligible = ?"); vals.push(JSON.stringify(v)); }
     else if (map[k]) { sets.push(`${map[k]} = ?`); vals.push(v as string | number | null); }
   }
   if (sets.length > 0) {
