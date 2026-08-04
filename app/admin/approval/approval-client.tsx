@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useNotify } from "@/components/notify-provider";
 import { getInitials, timeAgo, dateFmt } from "@/lib/format";
+import KatTag from "@/components/kat-tag";
 
 type Item = {
   id: number;
@@ -196,7 +197,7 @@ export default function ApprovalClient({ initial, stats }: { initial: Item[]; st
                     </div>
                   </td>
                   <td data-label="Kategori">
-                    <span className={`tag tag-${it.kategoriId.replace("k_", "")}`}>{it.kategori}</span>
+                    <KatTag nama={it.kategori} />
                   </td>
                   <td data-label="Waktu">
                     <div className="flex flex-col gap-0.5 leading-snug">

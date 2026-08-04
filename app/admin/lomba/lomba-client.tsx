@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useNotify } from "@/components/notify-provider";
+import KatTag from "@/components/kat-tag";
 
 type Lomba = {
   id: number;
@@ -19,7 +20,7 @@ type Lomba = {
 
 type PjInput = { kategoriId: string; pjNama: string; pjKontak: string | null };
 
-type Kat = { id: string; nama: string };
+type Kat = { id: string; nama: string; icon?: string; min?: number; max?: number; urutan?: number; autoAge?: boolean; colorBg?: string; colorText?: string; colorBorder?: string };
 
 const EMOJI_OPTIONS = ["🏆", "🍪", "🏃", "🪢", "🌴", "💧", "🎤", "🪑", "🥚", "🎯", "🏐", "🎲", "🎨", "🎭", "📚", "🚌"];
 
@@ -165,7 +166,7 @@ export default function LombaClient({ initial, kats, counts }: { initial: Lomba[
               const tags = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
                 .map((kid) => katMap.get(kid))
                 .filter(Boolean)
-                .map((k) => <span key={k!.id} className={`tag tag-${k!.id.replace("k_", "")}`}>{k!.nama}</span>);
+                .map((k) => <KatTag key={k!.id} nama={k!.nama} colorBg={k!.colorBg} colorText={k!.colorText} colorBorder={k!.colorBorder} />);
               return (
                 <tr key={l.id}>
                   <td className="cell-primary" data-label="Lomba">

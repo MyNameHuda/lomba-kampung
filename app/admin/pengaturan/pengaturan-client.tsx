@@ -12,6 +12,9 @@ type Kat = {
   max: number;
   urutan: number;
   autoAge: boolean;
+  colorBg: string;
+  colorText: string;
+  colorBorder: string;
 };
 
 const ICON_OPTIONS = [
@@ -116,7 +119,7 @@ export default function PengaturanClient({
     }
   }
 
-  async function saveKategori(data: { id?: string; nama: string; icon: string; min: number; max: number; autoAge: boolean }) {
+  async function saveKategori(data: { id?: string; nama: string; icon: string; min: number; max: number; autoAge: boolean; colorBg: string; colorText: string; colorBorder: string }) {
     try {
       const isNew = !data.id;
       const res = await fetch("/api/admin/kategori", {
@@ -130,12 +133,15 @@ export default function PengaturanClient({
           max: data.max,
           urutan: data.id ? (kats.find((k) => k.id === data.id)?.urutan || 0) : kats.length + 1,
           autoAge: data.autoAge,
+          colorBg: data.colorBg,
+          colorText: data.colorText,
+          colorBorder: data.colorBorder,
         }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Gagal");
       if (isNew) {
-        const newKat: Kat = { id: json.id, nama: data.nama, icon: data.icon, min: data.min, max: data.max, urutan: kats.length + 1, autoAge: data.autoAge };
+        const newKat: Kat = { id: json.id, nama: data.nama, icon: data.icon, min: data.min, max: data.max, urutan: kats.length + 1, autoAge: data.autoAge, colorBg: data.colorBg, colorText: data.colorText, colorBorder: data.colorBorder };
         setKats((prev) => [...prev, newKat].sort((a, b) => a.min - b.min));
       } else {
         setKats((prev) => prev.map((k) => (k.id === data.id ? { ...k, ...data } as Kat : k)).sort((a, b) => a.min - b.min));
@@ -443,13 +449,16 @@ function KategoriModal({
 }: {
   editing: Kat | null;
   onClose: () => void;
-  onSave: (data: { id?: string; nama: string; icon: string; min: number; max: number; autoAge: boolean }) => void;
+  onSave: (data: { id?: string; nama: string; icon: string; min: number; max: number; autoAge: boolean; colorBg: string; colorText: string; colorBorder: string }) => void;
 }) {
   const [nama, setNama] = useState(editing?.nama || "");
   const [icon, setIcon] = useState(editing?.icon || "fa-child");
   const [min, setMin] = useState(editing?.min || 5);
   const [max, setMax] = useState(editing?.max || 11);
   const [autoAge, setAutoAge] = useState(editing?.autoAge ?? (min >= 18));
+  const [colorBg, setColorBg] = useState(editing?.colorBg || "#FEF3C7");
+  const [colorText, setColorText] = useState(editing?.colorText || "#92400E");
+  const [colorBorder, setColorBorder] = useState(editing?.colorBorder || "#FDE68A");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -459,7 +468,7 @@ function KategoriModal({
     setBusy(true);
     setError("");
     try {
-      await onSave({ id: editing?.id, nama: nama.trim(), icon, min, max, autoAge });
+      await onSave({ id: editing?.id, nama: nama.trim(), icon, min, max, autoAge, colorBg, colorText, colorBorder });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Gagal");
     } finally {
@@ -529,6 +538,45 @@ function KategoriModal({
                 </span>
               </div>
             </label>
+          </div>
+
+          <div className="mt-4">
+            <label className="label">Warna Tag</label>
+            <div className="text-[11px] text-[#6B7280] mb-2">
+              <i className="fas fa-circle-info"></i> Warna badge yang muncul di daftar lomba & form pendaftaran
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="text-[10px] text-[#6B7280] uppercase tracking-wide font-bold">Background</label>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <input type="color" value={colorBg} onChange={(e) => setColorBg(e.target.value)} className="w-10 h-10 rounded border border-[#E5E7EB] cursor-pointer" />
+                  <input type="text" value={colorBg} onChange={(e) => setColorBg(e.target.value)} className="input flex-1 text-[11px] font-mono" maxLength={7} />
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] text-[#6B7280] uppercase tracking-wide font-bold">Teks</label>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <input type="color" value={colorText} onChange={(e) => setColorText(e.target.value)} className="w-10 h-10 rounded border border-[#E5E7EB] cursor-pointer" />
+                  <input type="text" value={colorText} onChange={(e) => setColorText(e.target.value)} className="input flex-1 text-[11px] font-mono" maxLength={7} />
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] text-[#6B7280] uppercase tracking-wide font-bold">Border</label>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <input type="color" value={colorBorder} onChange={(e) => setColorBorder(e.target.value)} className="w-10 h-10 rounded border border-[#E5E7EB] cursor-pointer" />
+                  <input type="text" value={colorBorder} onChange={(e) => setColorBorder(e.target.value)} className="input flex-1 text-[11px] font-mono" maxLength={7} />
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-[11px] text-[#6B7280]">Preview:</span>
+              <span
+                className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold"
+                style={{ background: colorBg, color: colorText, border: `1.5px solid ${colorBorder}` }}
+              >
+                {nama || "Contoh"}
+              </span>
+            </div>
           </div>
           {error && (
             <div className="bg-[#FEE2E2] text-[#991B1B] text-sm rounded p-2.5 mt-3">

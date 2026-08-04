@@ -57,6 +57,22 @@ async function all<T = Record<string, unknown>>(sql: string, ...args: InValue[])
   return (result.rows ?? []) as T[];
 }
 
+// Idempotent migration helper for adding new columns to existing tables.
+// SQLite has no "ADD COLUMN IF NOT EXISTS", so we check PRAGMA table_info first.
+async function ensureColumn(table: string, column: string, definition: string): Promise<void> {
+  const cols = await all<{ name: string }>(`PRAGMA table_info(${table})`);
+  if (cols.some((c) => c.name === column)) return;
+  await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+// Self-healing: ensure the kategori table has the color columns.
+// Safe to call repeatedly — no-op once columns exist.
+export async function ensureKategoriColorColumns(): Promise<void> {
+  await ensureColumn("kategori", "color_bg", "TEXT NOT NULL DEFAULT '#FEF3C7'");
+  await ensureColumn("kategori", "color_text", "TEXT NOT NULL DEFAULT '#92400E'");
+  await ensureColumn("kategori", "color_border", "TEXT NOT NULL DEFAULT '#FDE68A'");
+}
+
 async function get<T = Record<string, unknown>>(sql: string, ...args: InValue[]): Promise<T | undefined> {
   const result = await getClient().execute({ sql, args });
   const row = result.rows?.[0];
@@ -95,6 +111,9 @@ export type Kategori = {
   max: number;
   urutan: number;
   autoAge: boolean;
+  colorBg: string;
+  colorText: string;
+  colorBorder: string;
   createdAt: number;
 };
 
@@ -242,6 +261,8 @@ export async function resetAllData(keepKategori = true): Promise<void> {
 
 // =================== Kategori ===================
 export async function getKategori(): Promise<Kategori[]> {
+  // Self-healing: ensure color columns exist before reading them.
+  await ensureKategoriColorColumns();
   const rows = await all<Row>("SELECT * FROM kategori ORDER BY urutan, min");
   return toCamelAll<Kategori>(rows);
 }
@@ -250,25 +271,31 @@ export async function upsertKategori(k: Omit<Kategori, "createdAt">): Promise<vo
   const existing = await get<{ id: string }>("SELECT id FROM kategori WHERE id = ?", k.id);
   if (existing) {
     await run(
-      "UPDATE kategori SET nama = ?, icon = ?, min = ?, max = ?, urutan = ?, auto_age = ? WHERE id = ?",
+      "UPDATE kategori SET nama = ?, icon = ?, min = ?, max = ?, urutan = ?, auto_age = ?, color_bg = ?, color_text = ?, color_border = ? WHERE id = ?",
       k.nama,
       k.icon,
       k.min,
       k.max,
       k.urutan,
       k.autoAge ? 1 : 0,
+      k.colorBg,
+      k.colorText,
+      k.colorBorder,
       k.id
     );
   } else {
     await run(
-      "INSERT INTO kategori (id, nama, icon, min, max, urutan, auto_age) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO kategori (id, nama, icon, min, max, urutan, auto_age, color_bg, color_text, color_border) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       k.id,
       k.nama,
       k.icon,
       k.min,
       k.max,
       k.urutan,
-      k.autoAge ? 1 : 0
+      k.autoAge ? 1 : 0,
+      k.colorBg,
+      k.colorText,
+      k.colorBorder
     );
   }
 }

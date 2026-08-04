@@ -1,6 +1,7 @@
 import { getSettings, getLomba, getKategori, countPendaftarByLomba } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import Link from "next/link";
+import KatTag from "@/components/kat-tag";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -134,7 +135,7 @@ export default async function PublicHome({
             .map((kid) => katMap.get(kid))
             .filter(Boolean)
             .map((k) => (
-              <span key={k!.id} className={`tag tag-${k!.id.replace("k_", "")}`}>{k!.nama}</span>
+              <KatTag key={k!.id} nama={k!.nama} colorBg={k!.colorBg} colorText={k!.colorText} colorBorder={k!.colorBorder} />
             ));
           const peserta = countByLomba.get(l.id) ?? 0;
           return (

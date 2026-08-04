@@ -19,6 +19,9 @@ CREATE TABLE IF NOT EXISTS kategori (
   max INTEGER NOT NULL,
   urutan INTEGER NOT NULL DEFAULT 0,
   auto_age INTEGER NOT NULL DEFAULT 0,
+  color_bg TEXT NOT NULL DEFAULT '#FEF3C7',
+  color_text TEXT NOT NULL DEFAULT '#92400E',
+  color_border TEXT NOT NULL DEFAULT '#FDE68A',
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
