@@ -124,11 +124,11 @@ export default function InputManualClient({ lombaList, kats, recent }: { lombaLi
 
   return (
     <>
-      <div className="bg-[#d4f1f4] border border-[#a7dde0] border-l-4 border-l-[#3aafb9] rounded p-3.5 mb-5 flex gap-3 items-start">
-        <div className="w-8 h-8 rounded-full bg-[#3aafb9] text-white flex items-center justify-center flex-shrink-0 text-[13px]">
+      <div className="bg-[#FCE0E0] border border-[#FBE0E0] border-l-4 border-l-[#E11D1D] rounded p-3.5 mb-5 flex gap-3 items-start">
+        <div className="w-8 h-8 rounded-full bg-[#E11D1D] text-white flex items-center justify-center flex-shrink-0 text-[13px]">
           <i className="fas fa-circle-info"></i>
         </div>
-        <div className="text-[13px] text-[#093a3e] leading-relaxed">
+        <div className="text-[13px] text-[#9D1010] leading-relaxed">
           <strong className="block mb-1">Kapan pakai fitur ini?</strong>
           Untuk warga yang tidak bisa mendaftar sendiri (gaptek, tidak punya HP, atau datang langsung ke balai).
           Peserta otomatis <strong>Disetujui</strong> tanpa review admin.
@@ -244,9 +244,9 @@ export default function InputManualClient({ lombaList, kats, recent }: { lombaLi
 
           {/* Info kalau autoAge — tidak perlu pilih umur */}
           {selectedKat && skipUmur && (
-            <div className="bg-[#d4f1f4] border border-[#a7dde0] rounded p-3 flex items-start gap-2">
-              <i className="fas fa-circle-info text-[#093a3e] mt-0.5"></i>
-              <div className="text-[12px] text-[#093a3e]">
+            <div className="bg-[#FCE0E0] border border-[#FBE0E0] rounded p-3 flex items-start gap-2">
+              <i className="fas fa-circle-info text-[#9D1010] mt-0.5"></i>
+              <div className="text-[12px] text-[#9D1010]">
                 <strong>Kategori {selectedKat.nama}:</strong> usia otomatis tercatat{" "}
                 <strong>{selectedKat.min} tahun ke atas</strong>. Tidak perlu pilih umur.
               </div>

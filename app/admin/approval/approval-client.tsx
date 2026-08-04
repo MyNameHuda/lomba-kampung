@@ -252,12 +252,12 @@ export default function ApprovalClient({ initial, stats }: { initial: Item[]; st
                     </div>
                   ) : (
                     <div className="flex flex-col items-center gap-2.5 leading-relaxed max-w-[360px] mx-auto">
-                      <i className="fas fa-check-circle text-5xl text-[#a7dde0] mb-2"></i>
-                      <strong className="block text-[#093a3e] text-base">Semua bersih!</strong>
+                      <i className="fas fa-check-circle text-5xl text-[#FBE0E0] mb-2"></i>
+                      <strong className="block text-[#9D1010] text-base">Semua bersih!</strong>
                       <span className="text-sm">Tidak ada pendaftar yang menunggu approval.</span>
                       <Link
                         href="/admin/peserta"
-                        className="inline-block mt-3 px-5 py-2.5 bg-primary-light text-primary rounded-lg font-semibold text-sm no-underline hover:bg-[#a7dde0] transition-all whitespace-nowrap"
+                        className="inline-block mt-3 px-5 py-2.5 bg-primary-light text-primary rounded-lg font-semibold text-sm no-underline hover:bg-[#FBE0E0] transition-all whitespace-nowrap"
                       >
                         Lihat daftar peserta →
                       </Link>

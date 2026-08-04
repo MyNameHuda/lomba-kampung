@@ -177,9 +177,9 @@ export default function DaftarForm({ lomba, kategori }: { lomba: Lomba; kategori
         )}
 
         {skipUmur && selectedKat && (
-          <div className="bg-[#d4f1f4] border border-[#a7dde0] rounded-lg p-3 mb-4 flex items-start gap-2">
-            <i className="fas fa-circle-info text-[#093a3e] mt-0.5"></i>
-            <div className="text-[12px] text-[#093a3e]">
+          <div className="bg-[#FCE0E0] border border-[#FBE0E0] rounded-lg p-3 mb-4 flex items-start gap-2">
+            <i className="fas fa-circle-info text-[#9D1010] mt-0.5"></i>
+            <div className="text-[12px] text-[#9D1010]">
               <strong>Kategori {selectedKat.nama}:</strong> tidak perlu pilih umur. Peserta akan otomatis tercatat dengan usia minimum kategori ({selectedKat.min} tahun ke atas).
             </div>
           </div>

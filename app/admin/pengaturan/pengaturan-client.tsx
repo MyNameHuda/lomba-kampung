@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -278,15 +278,15 @@ export default function PengaturanClient({
             <div className="p-5 space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
                 <div><div className="text-[13px] font-semibold">Password Saat Ini</div></div>
-                <input type="password" className="input" value={oldPw} onChange={(e) => setOldPw(e.target.value)} placeholder="••••••••" />
+                <input type="password" className="input" value={oldPw} onChange={(e) => setOldPw(e.target.value)} placeholder="" />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
                 <div><div className="text-[13px] font-semibold">Password Baru</div><div className="text-[11px] text-[#6B7280]">Min 6 karakter</div></div>
-                <input type="password" className="input" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="••••••••" />
+                <input type="password" className="input" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="" />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
                 <div><div className="text-[13px] font-semibold">Konfirmasi Password</div></div>
-                <input type="password" className="input" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} placeholder="••••••••" />
+                <input type="password" className="input" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} placeholder="" />
               </div>
             </div>
             <div className="p-4 border-t border-[#E5E7EB] flex justify-end gap-2">
@@ -335,18 +335,18 @@ export default function PengaturanClient({
                       <td className="p-3 border-b border-[#E5E7EB]">
                         <strong>{k.nama}</strong>
                         {k.autoAge && (
-                          <span className="ml-2 inline-flex items-center gap-1 bg-[#d4f1f4] text-[#093a3e] text-[10px] font-bold px-1.5 py-0.5 rounded">
+                          <span className="ml-2 inline-flex items-center gap-1 bg-[#FCE0E0] text-[#9D1010] text-[10px] font-bold px-1.5 py-0.5 rounded">
                             <i className="fas fa-bolt" style={{ fontSize: 8 }}></i> AUTO UMUR
                           </span>
                         )}
                       </td>
                       <td className="p-3 border-b border-[#E5E7EB]">
                         <span className="font-mono font-semibold text-primary bg-primary-light px-2 py-0.5 rounded-full text-[11px]">
-                          {k.autoAge ? `${k.min}+ tahun` : `${k.min}–${k.max} tahun`}
+                          {k.autoAge ? `${k.min}+ tahun` : `${k.min}${k.max} tahun`}
                         </span>
                       </td>
                       <td className="p-3 border-b border-[#E5E7EB] text-[#6B7280] text-xs">
-                        {k.autoAge ? <span className="text-[#093a3e]">skip</span> : `${k.max - k.min + 1} tombol`}
+                        {k.autoAge ? <span className="text-[#9D1010]">skip</span> : `${k.max - k.min + 1} tombol`}
                       </td>
                       <td className="p-3 border-b border-[#E5E7EB]">
                         <div className="row-actions">
@@ -386,7 +386,7 @@ export default function PengaturanClient({
                 <button onClick={downloadBackup} className="btn btn-secondary"><i className="fas fa-download"></i> Download</button>
               </div>
               <div className="bg-[#FEE2E2] border border-[#FECACA] rounded p-5 mt-6">
-                <h4 className="text-[#991B1B] text-[13px] font-bold mb-1">⚠ Danger Zone</h4>
+                <h4 className="text-[#991B1B] text-[13px] font-bold mb-1">? Danger Zone</h4>
                 <p className="text-[#991B1B] text-xs mb-3">Hapus semua lomba & peserta. Kategori usia tetap dipertahankan. Tindakan tidak dapat dibatalkan.</p>
                 <div className="space-y-3">
                   <input
@@ -414,7 +414,7 @@ export default function PengaturanClient({
                 <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded p-3.5"><div className="text-[11px] text-[#6B7280]">Versi</div><div className="text-[13px] font-semibold">v1.1 MVP</div></div>
                 <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded p-3.5"><div className="text-[11px] text-[#6B7280]">Lisensi</div><div className="text-[13px] font-semibold">Free for Kampung Merdeka</div></div>
                 <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded p-3.5"><div className="text-[11px] text-[#6B7280]">Stack</div><div className="text-[13px] font-semibold">Next.js 14 + node:sqlite</div></div>
-                <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded p-3.5"><div className="text-[11px] text-[#6B7280]">🇮🇩</div><div className="text-[13px] font-semibold">Untuk HUT RI Kampung</div></div>
+                <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded p-3.5"><div className="text-[11px] text-[#6B7280]">????</div><div className="text-[13px] font-semibold">Untuk HUT RI Kampung</div></div>
               </div>
             </div>
           </div>
@@ -531,7 +531,7 @@ function KategoriModal({
               />
               <div>
                 <strong className="block text-[#1F2937] text-[13px] mb-0.5">
-                  <i className="fas fa-bolt text-[#093a3e]"></i> Auto Umur
+                  <i className="fas fa-bolt text-[#9D1010]"></i> Auto Umur
                 </strong>
                 <span className="text-[#6B7280] text-[11px]">
                   Peserta tidak perlu pilih umur di form. Umur otomatis tercatat sebagai nilai minimum kategori ({min} tahun ke atas). Cocok untuk kategori "Dewasa" / "Lansia".

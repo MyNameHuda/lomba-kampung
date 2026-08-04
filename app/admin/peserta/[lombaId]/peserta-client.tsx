@@ -150,7 +150,7 @@ export default function PesertaClient({
       {/* Lomba Header */}
       <div
         className="card mb-4"
-        style={{ background: "linear-gradient(135deg, #3aafb9 0%, #093a3e 100%)", color: "white", border: "none" }}
+        style={{ background: "linear-gradient(135deg, #E11D1D 0%, #9D1010 100%)", color: "white", border: "none" }}
       >
         <div className="p-4 flex items-center gap-4">
           <div className="text-5xl">{lomba.emoji}</div>

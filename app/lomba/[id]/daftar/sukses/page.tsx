@@ -19,7 +19,7 @@ async function SuksesContent({ searchParamsPromise }: { searchParamsPromise: Pro
   const k = p ? kats.find((kk) => kk.id === p.kategoriId) : null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#d4f1f4] to-[#f5fbfc] flex flex-col text-sm">
+    <div className="min-h-screen bg-gradient-to-br from-[#FCE0E0] to-[#f5fbfc] flex flex-col text-sm">
       <header className="bg-white/80 backdrop-blur py-4 flex items-center justify-center">
         <div className="flex items-center gap-2 text-primary font-bold">
           <i className="fas fa-flag"></i>

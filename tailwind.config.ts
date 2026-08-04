@@ -10,22 +10,24 @@ const config: Config = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: "#3aafb9",
-          dark: "#093a3e",
-          light: "#d4f1f4",
+          DEFAULT: "#E11D1D",
+          dark: "#9D1010",
+          light: "#FCE0E0",
         },
         accent: {
-          DEFAULT: "#64e9ee",
-          light: "#cffafd",
+          DEFAULT: "#F18181",
+          light: "#FCE5E5",
         },
-        ink: "#001011",
-        teal: {
-          dark: "#093a3e",
-          DEFAULT: "#3aafb9",
-          aqua: "#64e9ee",
-          sky: "#97c8eb",
+        ink: "#1A0303",
+        red: {
+          dark: "#9D1010",
+          DEFAULT: "#E11D1D",
+          mid: "#EC2929",
+          rose: "#F18181",
+          pink: "#F7B5B5",
+          light: "#FBE0E0",
         },
-        background: "#f5fbfc",
+        background: "#FDF5F5",
         surface: "#FFFFFF",
       },
       fontFamily: {

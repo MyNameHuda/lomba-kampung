@@ -86,24 +86,23 @@ def add_firework_bursts(img, count=10):
     return Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
 
 # === 1. Festive background (public site) ===
-# Indonesian flag inspired: red/white/gold bokeh on soft teal-cream gradient
+# Indonesian flag inspired: red/white/pink bokeh on soft pink gradient
 random.seed(42)
 W, H = 1920, 1080
-base = vertical_gradient(W, H, (250, 245, 235), (210, 230, 225))  # cream to mint
-glow = radial_glow(W, H, (255, 220, 180), (210, 230, 225), center=(W*0.7, H*0.3), radius=W*0.5)
+base = vertical_gradient(W, H, (253, 245, 245), (251, 224, 224))  # light pink to lighter pink
+glow = radial_glow(W, H, (255, 220, 220), (251, 224, 224), center=(W*0.7, H*0.3), radius=W*0.5)
 base = Image.blend(base, glow, 0.6)
-# Bokeh: red, white, gold tones
+# Bokeh: red, white, pink tones (no more teal/cyan/gold)
 bokeh_colors = [
-    (255, 100, 100, 35),  # red
-    (255, 255, 255, 40),  # white
-    (255, 215, 100, 35),  # gold
-    (255, 180, 130, 30),  # peach
-    (200, 240, 255, 25),  # soft cyan
+    (225, 29, 29, 40),    # primary red
+    (255, 255, 255, 50),  # white
+    (241, 129, 129, 35),  # rose pink
+    (247, 181, 181, 30), # light pink
+    (157, 16, 16, 25),   # dark red
 ]
 base = add_bokeh(base, count=60, color_range=bokeh_colors)
 base = add_sparkles(base, count=80)
 base = add_firework_bursts(base, count=6)
-# Subtle blur
 base = base.filter(ImageFilter.GaussianBlur(radius=3))
 out1 = os.path.join(OUT_DIR, "festive-bg.webp")
 base.save(out1, "WEBP", quality=82, method=6)
@@ -111,10 +110,10 @@ print(f"Created: {out1} ({os.path.getsize(out1):,} bytes)")
 
 # === 2. Admin background (subtle, professional) ===
 random.seed(7)
-base2 = vertical_gradient(W, H, (235, 248, 250), (220, 240, 240))  # soft cyan gradient
+base2 = vertical_gradient(W, H, (253, 245, 245), (252, 235, 235))  # soft pink gradient
 bokeh2_colors = [
-    (58, 175, 185, 25),    # primary teal
-    (100, 233, 238, 20),   # accent cyan
+    (225, 29, 29, 25),     # primary red
+    (241, 129, 129, 20),   # rose
     (255, 255, 255, 30),   # white
 ]
 base2 = add_bokeh(base2, count=40, color_range=bokeh2_colors)
@@ -126,14 +125,14 @@ print(f"Created: {out2} ({os.path.getsize(out2):,} bytes)")
 
 # === 3. Hero/landing background (bigger glow, more dramatic) ===
 random.seed(99)
-base3 = vertical_gradient(W, H, (200, 230, 235), (240, 250, 245))
-glow3 = radial_glow(W, H, (255, 230, 200), (200, 230, 235), center=(W*0.5, H*0.2), radius=W*0.7)
+base3 = vertical_gradient(W, H, (251, 224, 224), (255, 240, 240))
+glow3 = radial_glow(W, H, (255, 200, 200), (251, 224, 224), center=(W*0.5, H*0.2), radius=W*0.7)
 base3 = Image.blend(base3, glow3, 0.7)
 bokeh3_colors = [
-    (255, 130, 100, 30),  # warm red
-    (255, 220, 130, 35),  # gold
+    (225, 29, 29, 30),    # primary red
+    (241, 129, 129, 35),  # rose
     (255, 255, 255, 45),  # white
-    (100, 220, 240, 30),  # cyan
+    (157, 16, 16, 20),    # dark red
 ]
 base3 = add_bokeh(base3, count=70, color_range=bokeh3_colors)
 base3 = add_sparkles(base3, count=100)
