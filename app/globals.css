@@ -370,10 +370,10 @@
 .detail-hero { background: linear-gradient(135deg, #E11D1D 0%, #F18181 100%); color: white; padding: 40px 20px 36px; text-align: center; position: relative; line-height: 1.4; }
 
 /* Tag kategori colors — placed outside @layer so Tailwind doesn't purge them */
-.tag-balita { background: #FCE7F3; color: #9F1239; border-color: #FBCFE8; }
-.tag-anak { background: #FEF3C7; color: #92400E; border-color: #FDE68A; }
-.tag-remaja { background: #FCE5E5; color: #9D1010; border-color: #F18181; }
-.tag-dewasa { background: #FBE0E0; color: #9D1010; border-color: #E11D1D; }
+.tag-balita { background: #FFE0E0; color: #9D1010; border-color: #F18181; }
+.tag-anak { background: #E11D1D; color: #FFFFFF; border-color: #9D1010; }
+.tag-remaja { background: #F18181; color: #FFFFFF; border-color: #9D1010; }
+.tag-dewasa { background: #FFFFFF; color: #9D1010; border-color: #E11D1D; }
 .info-section { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 18px; margin-bottom: 14px; line-height: 1.5; }
 .info-section h3 { line-height: 1.4; }
 .sticky-cta { position: sticky; bottom: 0; background: white; padding: 14px 20px; border-top: 1px solid #E5E7EB; z-index: 10; }
