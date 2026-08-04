@@ -89,25 +89,30 @@ export async function ensurePjMultiSupport(): Promise<void> {
     if (idx.sql && idx.sql.includes('urutan')) return; // already migrated
   }
   // Migrate: recreate table with new PK, copy data, drop old.
-  // Each existing row gets urutan=0 — they're the only PJ for that combo, that's fine.
-  await exec(`
-    CREATE TABLE IF NOT EXISTS lomba_kategori_new (
-      lomba_id INTEGER NOT NULL,
-      kategori_id TEXT NOT NULL,
-      pj_nama TEXT NOT NULL,
-      pj_kontak TEXT,
-      urutan INTEGER NOT NULL DEFAULT 0,
-      PRIMARY KEY (lomba_id, kategori_id, urutan),
-      FOREIGN KEY (lomba_id) REFERENCES lomba(id) ON DELETE CASCADE,
-      FOREIGN KEY (kategori_id) REFERENCES kategori(id) ON DELETE CASCADE
-    );
-    INSERT OR IGNORE INTO lomba_kategori_new (lomba_id, kategori_id, pj_nama, pj_kontak, urutan)
-      SELECT lomba_id, kategori_id, pj_nama, COALESCE(pj_kontak, ''), urutan FROM lomba_kategori;
-    DROP TABLE IF EXISTS lomba_kategori;
-    ALTER TABLE lomba_kategori_new RENAME TO lomba_kategori;
-    CREATE INDEX IF NOT EXISTS idx_lomba_kategori_lomba ON lomba_kategori(lomba_id);
-    CREATE INDEX IF NOT EXISTS idx_lomba_kategori_kat ON lomba_kategori(kategori_id);
-  `);
+  // Each existing row keeps its urutan — they were already unique globally.
+  // Run all statements in one `batch()` so it's atomic (Turso HTTP requires batch,
+  // not multi-statement execute — that returns SQL_MANY_STATEMENTS error).
+  await getClient().batch(
+    [
+      `CREATE TABLE IF NOT EXISTS lomba_kategori_new (
+         lomba_id INTEGER NOT NULL,
+         kategori_id TEXT NOT NULL,
+         pj_nama TEXT NOT NULL,
+         pj_kontak TEXT,
+         urutan INTEGER NOT NULL DEFAULT 0,
+         PRIMARY KEY (lomba_id, kategori_id, urutan),
+         FOREIGN KEY (lomba_id) REFERENCES lomba(id) ON DELETE CASCADE,
+         FOREIGN KEY (kategori_id) REFERENCES kategori(id) ON DELETE CASCADE
+       )`,
+      `INSERT OR IGNORE INTO lomba_kategori_new (lomba_id, kategori_id, pj_nama, pj_kontak, urutan)
+         SELECT lomba_id, kategori_id, pj_nama, COALESCE(pj_kontak, ''), urutan FROM lomba_kategori`,
+      `DROP TABLE IF EXISTS lomba_kategori`,
+      `ALTER TABLE lomba_kategori_new RENAME TO lomba_kategori`,
+      `CREATE INDEX IF NOT EXISTS idx_lomba_kategori_lomba ON lomba_kategori(lomba_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_lomba_kategori_kat ON lomba_kategori(kategori_id)`,
+    ],
+    "write"
+  );
 }
 
 async function get<T = Record<string, unknown>>(sql: string, ...args: InValue[]): Promise<T | undefined> {
@@ -124,11 +129,11 @@ async function run(sql: string, ...args: InValue[]): Promise<{ lastInsertRowid: 
   };
 }
 
-// Multi-statement script (for schema push, migrations). Uses `execute` which accepts
-// multi-statement SQL separated by `;` — libSQL executes them in order.
-async function exec(sql: string): Promise<void> {
-  await getClient().execute(sql);
-}
+// Multi-statement script — use `client.batch(statements, "write")` directly
+// for migrations. Turso's HTTP transport rejects multi-statement `execute()`
+// with `SQL_MANY_STATEMENTS: SQL string contains more than one statement`,
+// so always prefer `batch()` for DDL/migration scripts. `batch()` also wraps
+// statements in a transaction, making migrations atomic.
 
 // =================== Types ===================
 export type Settings = {
