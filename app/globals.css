@@ -351,6 +351,7 @@
 .detail-hero { background: linear-gradient(135deg, #3aafb9 0%, #64e9ee 100%); color: white; padding: 40px 20px 36px; text-align: center; position: relative; line-height: 1.4; }
 
 /* Tag kategori colors — placed outside @layer so Tailwind doesn't purge them */
+.tag-balita { background: #FCE7F3; color: #9F1239; border-color: #FBCFE8; }
 .tag-anak { background: #FEF3C7; color: #92400E; border-color: #FDE68A; }
 .tag-remaja { background: #cffafd; color: #093a3e; border-color: #64e9ee; }
 .tag-dewasa { background: #a7dde0; color: #093a3e; border-color: #3aafb9; }
