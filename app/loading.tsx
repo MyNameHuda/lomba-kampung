@@ -6,7 +6,7 @@ export default function HomeLoading() {
       {/* Header (matches .app-header red gradient) */}
       <header className="app-header" aria-hidden="true">
         <div className="logo">
-          <Skeleton className="w-5 h-5 rounded" />
+          <Skeleton className="w-7 h-7 rounded-full" />
           <Skeleton className="h-4 w-32" />
         </div>
         <Skeleton className="h-7 w-16 rounded-full" />

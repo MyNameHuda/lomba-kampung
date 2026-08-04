@@ -22,7 +22,8 @@ async function SuksesContent({ searchParamsPromise }: { searchParamsPromise: Pro
     <div className="min-h-screen bg-gradient-to-br from-[#FCE0E0] to-[#f5fbfc] flex flex-col text-sm">
       <header className="bg-white/80 backdrop-blur py-4 flex items-center justify-center">
         <div className="flex items-center gap-2 text-primary font-bold">
-          <i className="fas fa-flag"></i>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.webp" alt="Logo IPEKA" className="w-6 h-6 rounded-full object-cover" />
           <span>Lomba Kampung</span>
         </div>
       </header>
@@ -40,7 +41,8 @@ async function SuksesContent({ searchParamsPromise }: { searchParamsPromise: Pro
         <div className="w-full max-w-[340px] bg-white rounded-2xl shadow-lg overflow-hidden border-2 border-primary">
           <div className="bg-gradient-to-br from-primary to-primary-dark text-white p-4 flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-bold">
-              <i className="fas fa-flag"></i>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.webp" alt="Logo IPEKA" className="w-5 h-5 rounded-full object-cover" />
               <span>KARTU PESERTA</span>
             </div>
             <span className="bg-accent text-white px-2.5 py-0.5 rounded-full text-[10px] font-bold">HUT RI 81</span>

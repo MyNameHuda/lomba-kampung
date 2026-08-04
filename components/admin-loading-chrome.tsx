@@ -10,7 +10,7 @@ export function AdminLoadingChrome({ children }: { children: React.ReactNode }) 
       <aside className="admin-sidebar" aria-hidden="true">
         <div className="p-5 pr-12 border-b border-[#E5E7EB] mb-4">
           <div className="flex items-center gap-2.5">
-            <Skeleton className="w-9 h-9 rounded" />
+            <Skeleton className="w-9 h-9 rounded-full" />
             <div>
               <Skeleton className="h-3.5 w-24 mb-1.5" />
               <Skeleton className="h-2.5 w-20" />

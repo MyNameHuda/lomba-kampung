@@ -57,7 +57,8 @@ export default async function PublicHome({
     <div className="mobile-page">
       <header className="app-header">
         <div className="logo">
-          <i className="fas fa-flag"></i>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.webp" alt="Logo IPEKA" className="w-7 h-7 rounded-full object-cover bg-white/10" />
           <span>{cfg?.appName || "Lomba Kampung"}</span>
         </div>
         {isAdmin ? (

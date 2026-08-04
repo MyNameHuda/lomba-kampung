@@ -49,8 +49,9 @@ export default function AdminShellClient({
             <i className="fas fa-xmark"></i>
           </button>
           <Link href="/admin" className="flex items-center gap-2.5 no-underline text-inherit">
-            <div className="w-9 h-9 rounded bg-gradient-to-br from-primary to-accent text-white flex items-center justify-center text-lg">
-              <i className="fas fa-flag"></i>
+            <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-primary-light">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.webp" alt="Logo IPEKA" className="w-full h-full object-cover" />
             </div>
             <div>
               <div className="font-bold text-[15px]">{appName}</div>

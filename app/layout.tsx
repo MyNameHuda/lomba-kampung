@@ -5,6 +5,10 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Lomba Kampung",
   description: "Manajemen Perlombaan 17 Agustus Tingkat Kampung",
+  icons: {
+    icon: [{ url: "/logo.webp", type: "image/webp" }],
+    apple: [{ url: "/logo.webp", type: "image/webp" }],
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

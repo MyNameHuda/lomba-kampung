@@ -31,8 +31,9 @@ export default function LoginPage() {
     <div className="login-page">
       <div className="login-card">
         <div className="text-center mb-6">
-          <div className="w-16 h-16 mx-auto mb-3 rounded bg-gradient-to-br from-primary to-accent text-white flex items-center justify-center text-3xl shadow">
-            <i className="fas fa-flag"></i>
+          <div className="w-16 h-16 mx-auto mb-3 rounded-full overflow-hidden shadow ring-2 ring-primary-light">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.webp" alt="Logo IPEKA" className="w-full h-full object-cover" />
           </div>
           <h1 className="text-[22px] font-extrabold mb-1">Lomba Kampung</h1>
           <p className="text-[13px] text-[#6B7280]">Panel Admin Panitia 17 Agustus</p>
