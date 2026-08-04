@@ -88,12 +88,31 @@
   .btn-success { @apply bg-[#15803D] text-white hover:brightness-90; }
 }
 
-/* Diffuse background */
+/* Diffuse background — layered webp image + soft teal gradients for readability */
 .diffuse-bg {
   background:
-    radial-gradient(ellipse 80% 60% at 15% 20%, rgba(58, 175, 185, 0.18) 0%, transparent 55%),
-    radial-gradient(ellipse 60% 60% at 85% 80%, rgba(151, 200, 235, 0.25) 0%, transparent 55%),
-    linear-gradient(160deg, #f5fbfc 0%, #e6f4f6 50%, #ecf7f8 100%);
+    linear-gradient(160deg, rgba(245, 251, 252, 0.82) 0%, rgba(230, 244, 246, 0.78) 50%, rgba(236, 247, 248, 0.82) 100%),
+    url("/bg/festive-bg.webp") center / cover no-repeat fixed;
+  background-attachment: fixed, fixed;
+  min-height: 100vh;
+}
+
+/* Admin variant — more subtle pattern */
+.surface-admin {
+  background:
+    linear-gradient(160deg, rgba(245, 251, 252, 0.88) 0%, rgba(220, 240, 240, 0.85) 100%),
+    url("/bg/admin-bg.webp") center / cover no-repeat fixed;
+  background-attachment: fixed, fixed;
+  min-height: 100vh;
+}
+
+/* Public landing hero — bigger glow */
+.surface-hero {
+  background:
+    linear-gradient(160deg, rgba(245, 251, 252, 0.78) 0%, rgba(230, 244, 246, 0.72) 50%, rgba(236, 247, 248, 0.78) 100%),
+    url("/bg/hero-bg.webp") center / cover no-repeat fixed;
+  background-attachment: fixed, fixed;
+  min-height: 100vh;
 }
 
 /* Mobile-first touch targets */
