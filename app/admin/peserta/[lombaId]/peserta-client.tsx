@@ -25,6 +25,8 @@ export type AdminSection = {
   rangeLabel: string;
 };
 
+export type EligibleKategori = { id: string; nama: string; min: number; max: number };
+
 const ICON: Record<AdminGroupKey, string> = {
   balita: "fa-baby",
   anakL: "fa-child",
@@ -43,15 +45,18 @@ export default function PesertaClient({
   lomba,
   sections,
   initial,
+  eligibleKategori,
 }: {
   lomba: { id: number; nama: string; emoji: string };
   sections: AdminSection[];
   initial: AdminGroupData;
+  eligibleKategori: EligibleKategori[];
 }) {
   const notify = useNotify();
   const [items, setItems] = useState<AdminGroupData>(initial);
   const [busy, setBusy] = useState<number | null>(null);
   const [filter, setFilter] = useState<"all" | "hadir" | "belum">("all");
+  const [editing, setEditing] = useState<Peserta | null>(null);
 
   // Sync with server-rendered prop after router.refresh()
   useEffect(() => {
@@ -60,6 +65,16 @@ export default function PesertaClient({
 
   const allItems = (Object.values(items) as Peserta[][]).flat();
   const hadir = allItems.filter((i) => i.hadir).length;
+
+  // Group key for a peserta — derives from kategoriId + umur + jenisKelamin
+  // to match the server-side `groupPendaftarForLomba` classification.
+  function groupKeyFor(p: { kategoriId: string; umur: number; jenisKelamin: "L" | "P" }): AdminGroupKey | null {
+    const k = eligibleKategori.find((x) => x.id === p.kategoriId);
+    if (!k) return null;
+    if (k.min < 5) return "balita";
+    if (k.min < 18) return p.jenisKelamin === "L" ? "anakL" : "anakP";
+    return "dewasa";
+  }
 
   async function toggleHadir(id: number, current: boolean) {
     setBusy(id);
@@ -87,6 +102,68 @@ export default function PesertaClient({
       });
       return next;
     });
+  }
+
+  function moveItem(id: number, newFields: { umur: number; jenisKelamin: "L" | "P"; kategoriId: string }) {
+    setItems((prev) => {
+      const next: AdminGroupData = { balita: [], anakL: [], anakP: [], dewasa: [] };
+      // Build new kategori name
+      const newKat = eligibleKategori.find((k) => k.id === newFields.kategoriId);
+      (Object.keys(prev) as AdminGroupKey[]).forEach((k) => {
+        for (const it of prev[k]) {
+          if (it.id === id) {
+            // move this item to the correct new section
+            const newKey = groupKeyFor(newFields);
+            if (newKey) {
+              const updated: Peserta = {
+                ...it,
+                ...newFields,
+                kategori: newKat?.nama || it.kategori,
+              };
+              next[newKey].push(updated);
+            }
+            // if newKey is null, drop the item (shouldn't happen)
+          } else {
+            next[k].push(it);
+          }
+        }
+      });
+      return next;
+    });
+  }
+
+  function removeItem(id: number) {
+    setItems((prev) => {
+      const next: AdminGroupData = { balita: [], anakL: [], anakP: [], dewasa: [] };
+      (Object.keys(prev) as AdminGroupKey[]).forEach((k) => {
+        next[k] = prev[k].filter((it) => it.id !== id);
+      });
+      return next;
+    });
+  }
+
+  async function deleteItem(p: Peserta) {
+    const ok = await notify.confirm({
+      title: "Hapus Peserta",
+      message: `Hapus peserta "${p.nama}" (${p.nomor})?\n\nTindakan ini tidak bisa dibatalkan.`,
+      confirmText: "Hapus",
+      variant: "danger",
+    });
+    if (!ok) return;
+    setBusy(p.id);
+    try {
+      const res = await fetch(`/api/admin/pendaftar/${p.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Gagal");
+      }
+      removeItem(p.id);
+      notify.success(`Peserta "${p.nama}" berhasil dihapus`);
+    } catch (e) {
+      notify.error(e instanceof Error ? e.message : "Gagal hapus peserta");
+    } finally {
+      setBusy(null);
+    }
   }
 
   function renderRow(p: Peserta) {
@@ -127,19 +204,35 @@ export default function PesertaClient({
           </button>
         </td>
         <td className="p-2.5 pr-3.5 text-right" data-label="Aksi">
-          {p.noWa ? (
-            <a
-              href={`https://wa.me/${p.noWa.replace(/\D/g, "")}`}
-              target="_blank"
-              rel="noreferrer"
+          <div className="row-actions justify-end">
+            {p.noWa && (
+              <a
+                href={`https://wa.me/${p.noWa.replace(/\D/g, "")}`}
+                target="_blank"
+                rel="noreferrer"
+                className="icon-action"
+                title="Chat WhatsApp"
+              >
+                <i className="fab fa-whatsapp"></i>
+              </a>
+            )}
+            <button
+              onClick={() => setEditing(p)}
+              disabled={busy === p.id}
               className="icon-action"
-              title="Chat WhatsApp"
+              title="Edit peserta"
             >
-              <i className="fab fa-whatsapp"></i>
-            </a>
-          ) : (
-            <span className="text-[#9CA3AF] text-[10px]">—</span>
-          )}
+              <i className="fas fa-pen"></i>
+            </button>
+            <button
+              onClick={() => deleteItem(p)}
+              disabled={busy === p.id}
+              className="icon-action reject"
+              title="Hapus peserta"
+            >
+              <i className="fas fa-trash"></i>
+            </button>
+          </div>
         </td>
       </tr>
     );
@@ -220,7 +313,7 @@ export default function PesertaClient({
                       <th className="text-left p-2.5">Peserta</th>
                       <th className="text-center p-2.5 w-[60px]">Umur</th>
                       <th className="text-center p-2.5 w-[60px]">Hadir</th>
-                      <th className="text-right p-2.5 pr-3.5 w-[60px]">Aksi</th>
+                      <th className="text-right p-2.5 pr-3.5 w-[120px]">Aksi</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -238,6 +331,152 @@ export default function PesertaClient({
           </div>
         )}
       </div>
+
+      {/* Edit Modal */}
+      {editing && (
+        <EditPesertaModal
+          peserta={editing}
+          eligibleKategori={eligibleKategori}
+          onClose={() => setEditing(null)}
+          onSaved={(updated) => {
+            // Move the item to the correct section based on updated kategori/umur/jk
+            moveItem(updated.id, {
+              kategoriId: updated.kategoriId,
+              umur: updated.umur,
+              jenisKelamin: updated.jenisKelamin,
+            });
+            // Update other fields in place (within the new section)
+            updateItem(updated.id, () => updated);
+            setEditing(null);
+            notify.success("Peserta berhasil diperbarui");
+          }}
+        />
+      )}
     </>
+  );
+}
+
+function EditPesertaModal({
+  peserta,
+  eligibleKategori,
+  onClose,
+  onSaved,
+}: {
+  peserta: Peserta;
+  eligibleKategori: EligibleKategori[];
+  onClose: () => void;
+  onSaved: (updated: Peserta) => void;
+}) {
+  const [nama, setNama] = useState(peserta.nama);
+  const [noWa, setNoWa] = useState(peserta.noWa || "");
+  const [umur, setUmur] = useState<number>(peserta.umur);
+  const [jenisKelamin, setJenisKelamin] = useState<"L" | "P">(peserta.jenisKelamin);
+  const [kategoriId, setKategoriId] = useState(peserta.kategoriId);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  // Warn if umur outside the chosen kategori range
+  const kat = eligibleKategori.find((k) => k.id === kategoriId);
+  const umurWarning = kat && (umur < kat.min || umur > kat.max)
+    ? `Umur ${umur} di luar range kategori ${kat.nama} (${kat.min}-${kat.max} th)`
+    : "";
+
+  async function save() {
+    setErr("");
+    if (!nama.trim()) { setErr("Nama wajib diisi"); return; }
+    if (nama.trim().length < 2) { setErr("Nama minimal 2 karakter"); return; }
+    if (umur < 1 || umur > 120) { setErr("Umur harus 1-120"); return; }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/admin/pendaftar/${peserta.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nama: nama.trim(),
+          noWa: noWa.trim() || null,
+          umur,
+          jenisKelamin,
+          kategoriId,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "Gagal");
+      onSaved({
+        ...peserta,
+        nama: nama.trim(),
+        noWa: noWa.trim() || null,
+        umur,
+        jenisKelamin,
+        kategoriId,
+        kategori: kat?.nama || peserta.kategori,
+      });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Gagal menyimpan");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl max-w-[480px] w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="p-5 border-b border-[#E5E7EB] flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-bold">Edit Peserta</h3>
+            <div className="text-[11px] text-[#6B7280] font-mono mt-0.5">{peserta.nomor}</div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-[#F9FAFB] text-[#6B7280] flex items-center justify-center hover:bg-[#E5E7EB]">
+            <i className="fas fa-xmark"></i>
+          </button>
+        </div>
+        <div className="p-5 overflow-y-auto space-y-3.5">
+          <div>
+            <label className="label">Nama <span className="text-primary">*</span></label>
+            <input className="input" value={nama} onChange={(e) => setNama(e.target.value)} autoFocus />
+          </div>
+          <div>
+            <label className="label">No WhatsApp <span className="text-[10px] text-[#6B7280] font-normal">(opsional)</span></label>
+            <input className="input" value={noWa} onChange={(e) => setNoWa(e.target.value)} placeholder="0812-..." />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Umur <span className="text-primary">*</span></label>
+              <input type="number" className="input" min={1} max={120} value={umur} onChange={(e) => setUmur(Number(e.target.value))} />
+            </div>
+            <div>
+              <label className="label">Jenis Kelamin <span className="text-primary">*</span></label>
+              <select className="input" value={jenisKelamin} onChange={(e) => setJenisKelamin(e.target.value as "L" | "P")}>
+                <option value="L">Laki-laki</option>
+                <option value="P">Perempuan</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="label">Kategori <span className="text-primary">*</span></label>
+            <select className="input" value={kategoriId} onChange={(e) => setKategoriId(e.target.value)}>
+              {eligibleKategori.map((k) => (
+                <option key={k.id} value={k.id}>{k.nama} ({k.min}-{k.max} th)</option>
+              ))}
+            </select>
+          </div>
+          {umurWarning && (
+            <div className="bg-[#FEF3C7] border border-[#FDE68A] text-[#92400E] text-[12px] rounded p-2.5 leading-snug">
+              <i className="fas fa-triangle-exclamation"></i> {umurWarning}
+            </div>
+          )}
+          {err && (
+            <div className="bg-[#FEE2E2] text-[#991B1B] text-sm rounded p-3 leading-relaxed">
+              <i className="fas fa-exclamation-triangle"></i> {err}
+            </div>
+          )}
+        </div>
+        <div className="p-4 bg-[#F9FAFB] flex gap-2 border-t border-[#E5E7EB]">
+          <button onClick={onClose} className="btn btn-secondary flex-1">Batal</button>
+          <button onClick={save} disabled={saving} className="btn btn-primary flex-1 disabled:opacity-60">
+            {saving ? <><i className="fas fa-spinner fa-spin"></i> Menyimpan...</> : <><i className="fas fa-save"></i> Simpan</>}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

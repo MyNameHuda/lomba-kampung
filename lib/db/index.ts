@@ -489,6 +489,10 @@ export async function getPendaftarByNomor(nomor: string): Promise<Pendaftar | nu
   return toCamel<Pendaftar>(await get<Row>("SELECT * FROM pendaftar WHERE nomor = ?", nomor));
 }
 
+export async function getPendaftarById(id: number): Promise<Pendaftar | null> {
+  return toCamel<Pendaftar>(await get<Row>("SELECT * FROM pendaftar WHERE id = ?", id));
+}
+
 export async function createPendaftar(
   data: Omit<Pendaftar, "id" | "nomor" | "createdAt" | "updatedAt" | "status" | "alasanTolak" | "hadir"> & {
     status?: Pendaftar["status"];

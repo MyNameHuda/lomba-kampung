@@ -41,13 +41,26 @@ export default async function PesertaDetailPage({ params }: { params: Promise<{ 
     initial[sec.key as AdminGroupKey] = items;
   }
 
+  // Pass eligible kategori (for Edit form dropdown) — slim shape
+  const eligibleKategori = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
+    .map((kid) => {
+      const k = katMap.get(kid);
+      return k ? { id: k.id, nama: k.nama, min: k.min, max: k.max } : null;
+    })
+    .filter(Boolean) as Array<{ id: string; nama: string; min: number; max: number }>;
+
   return (
     <AdminShell
       title={`Peserta ${l.nama}`}
       breadcrumb={`Manajemen Peserta / ${l.nama}`}
       activeNav="/admin/peserta"
     >
-      <PesertaClient lomba={{ id: l.id, nama: l.nama, emoji: l.emoji }} sections={sections} initial={initial} />
+      <PesertaClient
+        lomba={{ id: l.id, nama: l.nama, emoji: l.emoji }}
+        sections={sections}
+        initial={initial}
+        eligibleKategori={eligibleKategori}
+      />
     </AdminShell>
   );
 }
