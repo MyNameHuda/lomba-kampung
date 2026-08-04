@@ -5,13 +5,28 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default async function PublicHome() {
-  const [cfg, rows, kats, session] = await Promise.all([
+const KAT_ICON: Record<string, string> = {
+  "fa-child": "👶",
+  "fa-user": "🧑",
+  "fa-user-tie": "👨‍💼",
+  "fa-baby": "👶",
+  "fa-user-graduate": "🎓",
+  "fa-person-cane": "🧓",
+};
+
+export default async function PublicHome({
+  searchParams,
+}: {
+  searchParams: Promise<{ kategori?: string }>;
+}) {
+  const [sp, cfg, rows, kats, session] = await Promise.all([
+    searchParams,
     getSettings(),
     getLomba(true),
     getKategori(),
     getSession(),
   ]);
+  const activeKat = sp.kategori && kats.some((k) => k.id === sp.kategori) ? sp.kategori : null;
   const katMap = new Map(kats.map((k) => [k.id, k]));
   const isAdmin = !!session.isAdmin;
 
@@ -21,6 +36,21 @@ export default async function PublicHome() {
       ([id, n]) => [id, n as number]
     )
   );
+
+  // Count lomba per kategori for the filter chips
+  const countByKat = new Map<string, number>();
+  for (const l of rows) {
+    for (const kid of Array.isArray(l.kategoriEligible) ? l.kategoriEligible : []) {
+      countByKat.set(kid, (countByKat.get(kid) ?? 0) + 1);
+    }
+  }
+
+  // Filter lomba by active kategori (if any)
+  const visibleRows = activeKat
+    ? rows.filter((l) => Array.isArray(l.kategoriEligible) && l.kategoriEligible.includes(activeKat))
+    : rows;
+
+  const activeKatName = activeKat ? katMap.get(activeKat)?.nama : null;
 
   return (
     <div className="mobile-page">
@@ -60,9 +90,46 @@ export default async function PublicHome() {
           </div>
         </div>
 
-        <h2 className="text-base font-bold my-3.5">{rows.length} Lomba Tersedia</h2>
+        {/* Filter chips — horizontal scroll on mobile, links via URL params */}
+        <div className="-mx-4 px-4 mb-4 overflow-x-auto">
+          <div className="flex gap-2 min-w-max pb-1">
+            <Link
+              href="/"
+              className={`shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[12px] font-bold border-2 transition-all ${
+                activeKat === null
+                  ? "bg-primary border-primary text-white"
+                  : "bg-white border-[#E5E7EB] text-[#6B7280] hover:border-primary hover:text-primary"
+              }`}
+            >
+              <i className="fas fa-trophy text-[10px]"></i> Semua ({rows.length})
+            </Link>
+            {kats.map((k) => {
+              const isActive = activeKat === k.id;
+              const count = countByKat.get(k.id) ?? 0;
+              if (count === 0) return null; // Hide kategori with no lomba
+              return (
+                <Link
+                  key={k.id}
+                  href={`/?kategori=${k.id}`}
+                  className={`shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[12px] font-bold border-2 transition-all ${
+                    isActive
+                      ? "bg-primary border-primary text-white"
+                      : "bg-white border-[#E5E7EB] text-[#6B7280] hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  <span>{KAT_ICON[k.icon] || "👤"}</span> {k.nama} ({count})
+                </Link>
+              );
+            })}
+          </div>
+        </div>
 
-        {rows.map((l) => {
+        <h2 className="text-base font-bold my-3.5">
+          {visibleRows.length} Lomba Tersedia
+          {activeKatName && <span className="text-[#6B7280] font-normal"> · Kategori {activeKatName}</span>}
+        </h2>
+
+        {visibleRows.map((l) => {
           const tags = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
             .map((kid) => katMap.get(kid))
             .filter(Boolean)
@@ -87,10 +154,19 @@ export default async function PublicHome() {
           );
         })}
 
-        {rows.length === 0 && (
+        {visibleRows.length === 0 && (
           <div className="text-center py-10 text-[#6B7280]">
             <i className="fas fa-trophy text-5xl text-[#9CA3AF] mb-3"></i>
-            <p>Belum ada lomba yang dibuka.</p>
+            {activeKat ? (
+              <>
+                <p>Belum ada lomba untuk kategori <strong>{activeKatName}</strong>.</p>
+                <Link href="/" className="inline-block mt-3 text-primary text-sm font-semibold no-underline">
+                  ← Lihat semua lomba
+                </Link>
+              </>
+            ) : (
+              <p>Belum ada lomba yang dibuka.</p>
+            )}
           </div>
         )}
       </main>
