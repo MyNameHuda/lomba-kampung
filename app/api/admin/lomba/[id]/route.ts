@@ -16,7 +16,7 @@ const lombaSchema = z.object({
   deskripsi: z.string().max(500).nullable().optional(),
   syarat: z.array(z.string().min(1).max(200)).max(20).optional(),
   kategoriEligible: z.array(z.string().min(1)).min(1).max(10).optional(),
-  pjList: z.array(pjSchema).min(1).max(10).optional(),
+  pjList: z.array(pjSchema).min(1).max(30).optional(),
   status: z.enum(["draft", "aktif", "selesai"]).optional(),
   urutan: z.number().int().min(0).optional(),
 });
@@ -36,21 +36,34 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const body = await req.json();
     const data = lombaSchema.parse(body);
 
-    // If pjList provided, validate it covers the (possibly updated) eligible kategori
+    // If pjList provided, validate it covers the (possibly updated) eligible kategori.
+    // Multi-PJ allowed — same kategori can appear multiple times.
     if (data.pjList) {
       const eligible = new Set(data.kategoriEligible || existing.kategoriEligible);
-      const pjKatSet = new Set(data.pjList.map((p) => p.kategoriId));
-      if (pjKatSet.size !== data.pjList.length) {
-        return NextResponse.json({ error: "Ada kategori duplikat di pjList" }, { status: 400 });
-      }
+      const pjCountByKat = new Map<string, number>();
       for (const pj of data.pjList) {
         if (!eligible.has(pj.kategoriId)) {
-          return NextResponse.json({ error: `Kategori '${pj.kategoriId}' di pjList bukan eligible untuk lomba ini` }, { status: 400 });
+          return NextResponse.json(
+            { error: `Kategori '${pj.kategoriId}' di pjList bukan eligible untuk lomba ini` },
+            { status: 400 }
+          );
         }
+        pjCountByKat.set(pj.kategoriId, (pjCountByKat.get(pj.kategoriId) ?? 0) + 1);
       }
       for (const k of eligible) {
-        if (!pjKatSet.has(k)) {
-          return NextResponse.json({ error: `Kategori '${k}' belum ada PJ-nya di pjList` }, { status: 400 });
+        if (!pjCountByKat.has(k) || pjCountByKat.get(k) === 0) {
+          return NextResponse.json(
+            { error: `Kategori '${k}' belum ada PJ-nya di pjList` },
+            { status: 400 }
+          );
+        }
+      }
+      for (const [k, n] of pjCountByKat) {
+        if (n > 5) {
+          return NextResponse.json(
+            { error: `Kategori '${k}' punya ${n} PJ — maksimal 5` },
+            { status: 400 }
+          );
         }
       }
     }

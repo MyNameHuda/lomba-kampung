@@ -19,10 +19,15 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
     groupPendaftarForLomba(idNum),
   ]);
   const katMap = new Map(kats.map((k) => [k.id, k]));
-  // PJ entries in the order of kategoriEligible (so urutan is predictable)
-  const pjEntries = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
-    .map((katId) => [katId, l.pjByKategori?.[katId]] as const)
-    .filter(([, pj]) => pj != null) as Array<[string, { nama: string; kontak: string | null }]>;
+  // Flatten pjByKategori into per-PJ entries (one row per PJ, multiple allowed per kategori).
+  // Order: kategoriEligible first, then urutan within each kategori (server already returns sorted).
+  const pjEntries: Array<{ katId: string; pj: { nama: string; kontak: string | null } }> = [];
+  for (const katId of (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])) {
+    const list = l.pjByKategori?.[katId] || [];
+    for (const pj of list) {
+      if (pj?.nama) pjEntries.push({ katId, pj });
+    }
+  }
 
   const totalPeserta = groups.sections.reduce((sum, s) => sum + s.peserta.length, 0);
 
@@ -58,20 +63,26 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
         <div className="info-section">
           <h3 className="text-[13px] font-bold mb-3 text-[#1F2937] flex items-center gap-2">
             <i className="fas fa-user-tie text-primary"></i> Penanggung Jawab
-            {pjEntries.length > 1 && (
-              <span className="text-[10px] font-normal text-[#6B7280]">per kategori</span>
-            )}
+            {(() => {
+              const katCount = new Set(pjEntries.map((e) => e.katId)).size;
+              return katCount > 1 ? (
+                <span className="text-[10px] font-normal text-[#6B7280]">per kategori</span>
+              ) : null;
+            })()}
           </h3>
           <div className="space-y-2.5 mt-2">
-            {pjEntries.map(([katId, pj]) => {
+            {pjEntries.map(({ katId, pj }, idx) => {
               const kat = katMap.get(katId);
+              // Show kategori label on the first PJ of each kategori (avoids repetition).
+              const prevEntry = idx > 0 ? pjEntries[idx - 1] : null;
+              const showKatLabel = !prevEntry || prevEntry.katId !== katId;
               return (
-                <div key={katId} className="flex items-center gap-3 p-3 bg-[#F9FAFB] rounded-lg">
+                <div key={`${katId}-${idx}`} className="flex items-center gap-3 p-3 bg-[#F9FAFB] rounded-lg">
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
                     {getInitials(pj.nama)}
                   </div>
                   <div className="flex-1 min-w-0 flex flex-col gap-0.5 leading-snug">
-                    {kat && (
+                    {showKatLabel && kat && (
                       <div className="text-[10px] font-bold text-primary uppercase tracking-wide">{kat.nama}</div>
                     )}
                     <div className="font-semibold text-[13px] truncate">{pj.nama}</div>

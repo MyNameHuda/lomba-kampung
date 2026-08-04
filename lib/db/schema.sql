@@ -45,7 +45,9 @@ CREATE TABLE IF NOT EXISTS lomba_kategori (
   pj_nama TEXT NOT NULL,
   pj_kontak TEXT,
   urutan INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (lomba_id, kategori_id),
+  -- PK includes `urutan` so a single (lomba, kategori) combo can have multiple PJs.
+  -- Existing installs are migrated by `ensurePjMultiSupport()` in lib/db/index.ts.
+  PRIMARY KEY (lomba_id, kategori_id, urutan),
   FOREIGN KEY (lomba_id) REFERENCES lomba(id) ON DELETE CASCADE,
   FOREIGN KEY (kategori_id) REFERENCES kategori(id) ON DELETE CASCADE
 );

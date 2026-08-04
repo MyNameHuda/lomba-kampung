@@ -29,10 +29,12 @@ export async function GET() {
   const katMap = new Map(kats.map((k) => [k.id, k]));
 
   const lombaRows = lomList.map((l) => {
-    // Build PJ list per kategori
-    const pjLines = Object.entries(l.pjByKategori || {}).map(([katId, pj]) => {
+    // Build PJ list per kategori — multiple PJs per kategori allowed.
+    // Format: "Kategori: PJ1 (kontak), PJ2 (kontak)"
+    const pjLines = Object.entries(l.pjByKategori || {}).map(([katId, pjList]) => {
       const kat = katMap.get(katId);
-      return `${kat?.nama || katId}: ${pj.nama}${pj.kontak ? " (" + pj.kontak + ")" : ""}`;
+      const names = (pjList || []).map((p) => p.kontak ? `${p.nama} (${p.kontak})` : p.nama).join(", ");
+      return `${kat?.nama || katId}: ${names}`;
     });
     return {
       ID: l.id,

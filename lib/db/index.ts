@@ -73,6 +73,43 @@ export async function ensureKategoriColorColumns(): Promise<void> {
   await ensureColumn("kategori", "color_border", "TEXT NOT NULL DEFAULT '#FDE68A'");
 }
 
+// Self-healing: ensure lomba_kategori supports multiple PJs per (lomba, kategori).
+// Old PK: (lomba_id, kategori_id) — only 1 PJ allowed per combo.
+// New PK: (lomba_id, kategori_id, urutan) — multiple PJs allowed, ordered by `urutan`.
+// SQLite can't DROP CONSTRAINT, so we detect old schema via PRAGMA and recreate the table.
+// Idempotent: no-op once migrated.
+export async function ensurePjMultiSupport(): Promise<void> {
+  // Look at the auto-indexes on lomba_kategori (PK creates one).
+  // If any of them includes the 'urutan' column, the new schema is already in place.
+  const autoIndexes = await all<{ name: string; sql: string | null }>(
+    `SELECT name, sql FROM sqlite_master
+     WHERE type = 'index' AND tbl_name = 'lomba_kategori' AND name LIKE 'sqlite_autoindex_%'`
+  );
+  for (const idx of autoIndexes) {
+    if (idx.sql && idx.sql.includes('urutan')) return; // already migrated
+  }
+  // Migrate: recreate table with new PK, copy data, drop old.
+  // Each existing row gets urutan=0 — they're the only PJ for that combo, that's fine.
+  await exec(`
+    CREATE TABLE IF NOT EXISTS lomba_kategori_new (
+      lomba_id INTEGER NOT NULL,
+      kategori_id TEXT NOT NULL,
+      pj_nama TEXT NOT NULL,
+      pj_kontak TEXT,
+      urutan INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (lomba_id, kategori_id, urutan),
+      FOREIGN KEY (lomba_id) REFERENCES lomba(id) ON DELETE CASCADE,
+      FOREIGN KEY (kategori_id) REFERENCES kategori(id) ON DELETE CASCADE
+    );
+    INSERT OR IGNORE INTO lomba_kategori_new (lomba_id, kategori_id, pj_nama, pj_kontak, urutan)
+      SELECT lomba_id, kategori_id, pj_nama, COALESCE(pj_kontak, ''), urutan FROM lomba_kategori;
+    DROP TABLE IF EXISTS lomba_kategori;
+    ALTER TABLE lomba_kategori_new RENAME TO lomba_kategori;
+    CREATE INDEX IF NOT EXISTS idx_lomba_kategori_lomba ON lomba_kategori(lomba_id);
+    CREATE INDEX IF NOT EXISTS idx_lomba_kategori_kat ON lomba_kategori(kategori_id);
+  `);
+}
+
 async function get<T = Record<string, unknown>>(sql: string, ...args: InValue[]): Promise<T | undefined> {
   const result = await getClient().execute({ sql, args });
   const row = result.rows?.[0];
@@ -127,8 +164,10 @@ export type Lomba = {
   status: "draft" | "aktif" | "selesai";
   urutan: number;
   createdAt: number;
-  // PJ per eligible kategori (keyed by kategoriId). May be empty if lomba has no eligible kategori yet.
-  pjByKategori: Record<string, { nama: string; kontak: string | null }>;
+  // PJ per eligible kategori (keyed by kategoriId). Each kategori has 1+ PJs
+  // — the array is the list of penanggung jawab assigned to that kategori.
+  // Empty array if lomba has no eligible kategori yet.
+  pjByKategori: Record<string, Array<{ nama: string; kontak: string | null }>>;
 };
 
 export type LombaKategoriInput = {
@@ -305,21 +344,25 @@ export async function deleteKategori(id: string): Promise<void> {
 }
 
 // =================== Lomba ===================
-// Load pjByKategori for many lomba at once (avoid N+1)
-async function loadPjBulk(): Promise<Map<number, Record<string, { nama: string; kontak: string | null }>>> {
-  const rows = await all<{ lomba_id: number; kategori_id: string; pj_nama: string; pj_kontak: string | null }>(
-    "SELECT lomba_id, kategori_id, pj_nama, pj_kontak FROM lomba_kategori ORDER BY lomba_id, urutan"
+// Load pjByKategori for many lomba at once (avoid N+1).
+// Groups rows into per-kategori arrays so a single (lomba, kategori) combo
+// can hold multiple PJs (e.g. 2 or 3 PJ per kategori).
+async function loadPjBulk(): Promise<Map<number, Record<string, Array<{ nama: string; kontak: string | null }>>>> {
+  await ensurePjMultiSupport();
+  const rows = await all<{ lomba_id: number; kategori_id: string; pj_nama: string; pj_kontak: string | null; urutan: number }>(
+    "SELECT lomba_id, kategori_id, pj_nama, pj_kontak, urutan FROM lomba_kategori ORDER BY lomba_id, kategori_id, urutan"
   );
-  const map = new Map<number, Record<string, { nama: string; kontak: string | null }>>();
+  const map = new Map<number, Record<string, Array<{ nama: string; kontak: string | null }>>>();
   for (const r of rows) {
     let m = map.get(r.lomba_id);
     if (!m) { m = {}; map.set(r.lomba_id, m); }
-    m[r.kategori_id] = { nama: r.pj_nama, kontak: r.pj_kontak };
+    if (!m[r.kategori_id]) m[r.kategori_id] = [];
+    m[r.kategori_id].push({ nama: r.pj_nama, kontak: r.pj_kontak });
   }
   return map;
 }
 
-function attachPj<T extends { id: number }>(row: T, pjBulk: Map<number, Record<string, { nama: string; kontak: string | null }>>): T & { pjByKategori: Record<string, { nama: string; kontak: string | null }> } {
+function attachPj<T extends { id: number }>(row: T, pjBulk: Map<number, Record<string, Array<{ nama: string; kontak: string | null }>>>): T & { pjByKategori: Record<string, Array<{ nama: string; kontak: string | null }>> } {
   return { ...row, pjByKategori: pjBulk.get(row.id) || {} };
 }
 
@@ -339,7 +382,7 @@ export async function getLombaById(id: number): Promise<Lomba | null> {
   return attachPj(row, pjBulk);
 }
 
-export async function getLombaWithCount(): Promise<{ id: number; nama: string; emoji: string; count: number; pjByKategori: Record<string, { nama: string; kontak: string | null }> }[]> {
+export async function getLombaWithCount(): Promise<{ id: number; nama: string; emoji: string; count: number; pjByKategori: Record<string, Array<{ nama: string; kontak: string | null }>> }[]> {
   const rows = await all<Row>(`
     SELECT l.id, l.nama, l.emoji, COUNT(p.id) as count
     FROM lomba l
@@ -373,19 +416,25 @@ export async function createLomba(data: Omit<Lomba, "id" | "createdAt" | "pjByKa
 }
 
 export async function setLombaKategori(lombaId: number, list: LombaKategoriInput[]): Promise<void> {
+  // Self-healing: ensure the table can hold multiple PJs per (lomba, kategori).
+  // Idempotent — no-op once migrated.
+  await ensurePjMultiSupport();
   // Replace all pj rows for this lomba with the new list
   await run("DELETE FROM lomba_kategori WHERE lomba_id = ?", lombaId);
-  let idx = 0;
+  // `urutan` resets per-kategori so PJs of the same kategori stay contiguous in display
+  // (e.g. k_balita: urutan 0,1,2  then  k_anak: urutan 0,1,2).
+  const urutanByKat = new Map<string, number>();
   for (const pj of list) {
+    const urutan = urutanByKat.get(pj.kategoriId) ?? 0;
+    urutanByKat.set(pj.kategoriId, urutan + 1);
     await run(
       "INSERT INTO lomba_kategori (lomba_id, kategori_id, pj_nama, pj_kontak, urutan) VALUES (?, ?, ?, ?, ?)",
       lombaId,
       pj.kategoriId,
       pj.pjNama,
       pj.pjKontak,
-      idx
+      urutan
     );
-    idx++;
   }
 }
 
