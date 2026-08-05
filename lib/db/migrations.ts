@@ -17,6 +17,15 @@ export async function ensureJuaraColumn(): Promise<void> {
   await ensureColumn("pendaftar", "juara_rank", "INTEGER");
 }
 
+// Self-healing: ensure lomba has kualifikasi phase columns (v3 stage system).
+// - finalis_count: how many finalists per kategori (default 5, range 1-50)
+// - phase: 'kualifikasi' | 'final' | NULL
+//   NULL = lomba belum mulai kualifikasi (default for new lomba, also legacy v2 mode)
+export async function ensureKualifikasiColumns(): Promise<void> {
+  await ensureColumn("lomba", "finalis_count", "INTEGER NOT NULL DEFAULT 5");
+  await ensureColumn("lomba", "phase", "TEXT");
+}
+
 // Self-healing: ensure lomba_kategori supports multiple PJs per (lomba, kategori).
 // Old PK: (lomba_id, kategori_id) — only 1 PJ allowed per combo.
 // New PK: (lomba_id, kategori_id, urutan) — multiple PJs allowed, ordered by `urutan`.

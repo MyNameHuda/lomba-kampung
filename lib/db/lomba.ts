@@ -66,15 +66,17 @@ export async function getLombaWithCount(): Promise<{ id: number; nama: string; e
 // =================== Write ===================
 export async function createLomba(data: Omit<Lomba, "id" | "createdAt" | "pjByKategori">): Promise<number> {
   const result = await run(
-    `INSERT INTO lomba (nama, emoji, deskripsi, syarat, kategori_eligible, status, urutan)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO lomba (nama, emoji, deskripsi, syarat, kategori_eligible, status, urutan, finalis_count, phase)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     data.nama,
     data.emoji,
     data.deskripsi,
     JSON.stringify(data.syarat || []),
     JSON.stringify(data.kategoriEligible || []),
     data.status,
-    data.urutan
+    data.urutan,
+    data.finalisCount,
+    data.phase
   );
   return Number(result.lastInsertRowid);
 }
@@ -108,6 +110,8 @@ export async function updateLomba(id: number, updates: Partial<Omit<Lomba, "id" 
     deskripsi: "deskripsi",
     status: "status",
     urutan: "urutan",
+    finalisCount: "finalis_count",
+    phase: "phase",
   };
   const sets: string[] = [];
   const vals: (string | number | null)[] = [];

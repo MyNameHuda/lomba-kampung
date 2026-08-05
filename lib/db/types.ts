@@ -31,6 +31,8 @@ export type JenisKelamin = "L" | "P";
 
 export type Pj = { nama: string; kontak: string | null };
 
+export type LombaPhase = "kualifikasi" | "final";
+
 export type Lomba = {
   id: number;
   nama: string;
@@ -41,6 +43,13 @@ export type Lomba = {
   status: LombaStatus;
   urutan: number;
   createdAt: number;
+  // Stage system v3 — kualifikasi phase config.
+  // finalisCount: how many finalists per kategori to advance from kualifikasi
+  //   to final (default 5, range 1-50). Admin-set per lomba at create/edit.
+  finalisCount: number;
+  // phase: NULL = belum mulai kualifikasi, 'kualifikasi' = picking finalists,
+  //   'final' = picking Juara 1/2/3 from finalists.
+  phase: LombaPhase | null;
   // PJ per eligible kategori (keyed by kategoriId). Each kategori has 1+ PJs
   // — the array is the list of penanggung jawab assigned to that kategori.
   // Empty array if lomba has no eligible kategori yet.

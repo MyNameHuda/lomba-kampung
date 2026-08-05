@@ -36,6 +36,14 @@ CREATE TABLE IF NOT EXISTS lomba (
   pj_kontak TEXT,
   status TEXT NOT NULL DEFAULT 'aktif',
   urutan INTEGER NOT NULL DEFAULT 0,
+  -- Stage system v3 — kualifikasi phase config.
+  -- finalis_count: how many finalists per kategori advance from kualifikasi to
+  -- final (default 5, range 1-50). Set per lomba at create/edit.
+  -- phase: NULL = belum mulai kualifikasi, 'kualifikasi' = picking finalists,
+  -- 'final' = picking Juara 1/2/3 from finalists.
+  -- Existing installs are migrated by `ensureKualifikasiColumns()` in lib/db/index.ts.
+  finalis_count INTEGER NOT NULL DEFAULT 5,
+  phase TEXT,
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 

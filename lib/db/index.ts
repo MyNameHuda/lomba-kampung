@@ -22,7 +22,7 @@ export type {
 } from "./types";
 
 // Migrations (idempotent — safe to call repeatedly)
-export { ensureKategoriColorColumns, ensurePjMultiSupport, ensureJuaraColumn } from "./migrations";
+export { ensureKategoriColorColumns, ensurePjMultiSupport, ensureJuaraColumn, ensureKualifikasiColumns } from "./migrations";
 
 // Settings
 export { getSettings, updateSettings, updateAdminPassword } from "./settings";

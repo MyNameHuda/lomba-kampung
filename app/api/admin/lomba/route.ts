@@ -79,6 +79,8 @@ export async function POST(req: Request) {
       kategoriEligible: data.kategoriEligible,
       status: data.status,
       urutan: data.urutan,
+      finalisCount: 5, // default; admin can edit later via PATCH (TODO: add field to modal in commit 3)
+      phase: null,
     });
     await setLombaKategori(id, data.pjList.map((p) => ({
       kategoriId: p.kategoriId,
