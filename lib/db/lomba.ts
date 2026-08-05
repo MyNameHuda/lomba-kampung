@@ -182,3 +182,63 @@ export async function markLombaSelesai(lombaId: number): Promise<void> {
     lombaId
   );
 }
+
+// =================== Kualifikasi phase (v3 stage system) ===================
+// Stage system v3 adds a kualifikasi round before the final Juara picking.
+// Admin: Mulai Kualifikasi → Loloskan finalis per kategori → Tutup Kualifikasi
+// → Final (picks Juara 1/2/3 from finalists) → Selesaikan.
+// See docs/STAGE_SYSTEM.md for full spec.
+
+/**
+ * Set the lomba's phase. Used by Mulai/Tutup Kualifikasi endpoints.
+ * Phase transitions: NULL → 'kualifikasi' → 'final' (one-way).
+ */
+export async function setLombaPhase(
+  lombaId: number,
+  phase: "kualifikasi" | "final" | null
+): Promise<void> {
+  await run("UPDATE lomba SET phase = ? WHERE id = ?", phase, lombaId);
+}
+
+/**
+ * Check if a lomba is ready to "Tutup Kualifikasi" — meaning every eligible
+ * kategori with >= 1 pendaftar has >= 1 finalist picked.
+ * Returns `{ ok, missingKategori, perKategori }`.
+ */
+export async function getKualifikasiReadiness(lombaId: number): Promise<{
+  ok: boolean;
+  missingKategori: string[];
+  perKategori: Record<string, { finalists: number; pendaftar: number }>;
+}> {
+  const l = await getLombaById(lombaId);
+  if (!l) return { ok: false, missingKategori: [], perKategori: {} };
+  const perKategori: Record<string, { finalists: number; pendaftar: number }> = {};
+  const missingKategori: string[] = [];
+  for (const katId of l.kategoriEligible) {
+    // Count pendaftar (all disetujui) — getPendaftarByLomba filters by status, so use direct query
+    const pRows = await all<{ c: number }>(
+      `SELECT COUNT(*) as c FROM pendaftar WHERE lomba_id = ? AND kategori_id = ? AND status = 'disetujui'`,
+      lombaId,
+      katId
+    );
+    const pendaftarCount = Number(pRows[0]?.c ?? 0);
+    // Count finalists (juara_rank 1..finalisCount)
+    const fRows = await all<{ c: number }>(
+      `SELECT COUNT(*) as c FROM pendaftar
+       WHERE lomba_id = ? AND kategori_id = ? AND juara_rank IS NOT NULL AND juara_rank <= ?`,
+      lombaId,
+      katId,
+      l.finalisCount
+    );
+    const finalistsCount = Number(fRows[0]?.c ?? 0);
+    perKategori[katId] = { finalists: finalistsCount, pendaftar: pendaftarCount };
+    if (pendaftarCount > 0 && finalistsCount < 1) {
+      missingKategori.push(katId);
+    }
+  }
+  return {
+    ok: missingKategori.length === 0,
+    missingKategori,
+    perKategori,
+  };
+}

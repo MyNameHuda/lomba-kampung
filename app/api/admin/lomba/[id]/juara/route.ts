@@ -1,9 +1,12 @@
-// Juara picker API for stage system MVP.
+// Juara picker API for stage system v3 (kualifikasi + Juara).
 // POST   = set Juara 1/2/3 for a pendaftar (un-picks existing Juara with same rank)
 // DELETE = clear Juara (set juara_rank = NULL)
 //
+// Phase-aware:
+//   - phase='kualifikasi': rank is 1..finalisCount (finalist slot)
+//   - phase='final' or NULL (legacy): rank is 1, 2, or 3 (Juara rank)
+//
 // Juara is scoped per (lomba, kategori). At most 1 Juara per rank per kategori.
-// See lib/db/pendaftar.ts setJuaraRank for the un-pick logic.
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -17,7 +20,9 @@ import {
 
 const postSchema = z.object({
   pendaftarId: z.number().int().positive(),
-  rank: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  // Accept 1..50 (finalisCount max). API layer validates exact range
+  // based on lomba.phase + finalisCount.
+  rank: z.number().int().min(1).max(50),
 });
 
 const deleteSchema = z.object({
@@ -46,6 +51,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       );
     }
 
+    // Phase-aware rank validation
+    if (lomba.phase === "kualifikasi") {
+      if (data.rank > lomba.finalisCount) {
+        return NextResponse.json(
+          { error: `Rank ${data.rank} melebihi finalis_count (${lomba.finalisCount})` },
+          { status: 400 }
+        );
+      }
+    } else {
+      // phase='final' or NULL (legacy v2 mode)
+      if (data.rank > 3) {
+        return NextResponse.json(
+          { error: "Juara rank harus 1, 2, atau 3" },
+          { status: 400 }
+        );
+      }
+    }
+
     // Validate pendaftar
     const p = await getPendaftarById(data.pendaftarId);
     if (!p) return NextResponse.json({ error: "Pendaftar tidak ditemukan" }, { status: 404 });
@@ -68,8 +91,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       );
     }
 
+    // Phase-specific: in kualifikasi, pendaftar can be picked as finalist
+    // if not already a finalist. In final, only finalists can be picked.
+    if (lomba.phase === "final" && (p.juaraRank === null || p.juaraRank > lomba.finalisCount)) {
+      return NextResponse.json(
+        { error: "Pendaftar bukan finalis (juara_rank tidak valid di final phase)" },
+        { status: 400 }
+      );
+    }
+    // In kualifikasi: pendaftar shouldn't already be a finalist with a different rank
+    // (idempotent re-pick with same rank is allowed)
+    if (lomba.phase === "kualifikasi" && p.juaraRank !== null && p.juaraRank <= lomba.finalisCount && p.juaraRank !== data.rank) {
+      return NextResponse.json(
+        { error: `Pendaftar sudah menjadi finalis (rank ${p.juaraRank}). Un-loloskan dulu.` },
+        { status: 400 }
+      );
+    }
+
     // Set Juara (atomically un-picks existing Juara with same rank in same (lomba, kategori))
-    await setJuaraRank(data.pendaftarId, data.rank);
+    const result = await setJuaraRank(data.pendaftarId, data.rank);
 
     // Invalidate all relevant pages
     revalidatePath("/admin/lomba");
@@ -81,6 +121,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       pendaftarId: data.pendaftarId,
       rank: data.rank,
       kategoriId: p.kategoriId,
+      phase: lomba.phase,
     });
   } catch (e) {
     if (e instanceof z.ZodError) {
@@ -103,7 +144,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     const body = await req.json().catch(() => ({}));
     const data = deleteSchema.parse(body);
 
-    // Validate pendaftar (lomba validation skipped — clear is a no-op for wrong lomba)
+    // Validate pendaftar
     const p = await getPendaftarById(data.pendaftarId);
     if (!p) return NextResponse.json({ error: "Pendaftar tidak ditemukan" }, { status: 404 });
     if (p.lombaId !== lombaId) {

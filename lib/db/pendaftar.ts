@@ -279,13 +279,18 @@ export type JuaraSlim = {
  * Set Juara rank for a pendaftar. Atomically:
  *  1. Un-pick any existing Juara with the same rank in the same (lomba, kategori)
  *  2. Set this pendaftar to the new rank
+ *
+ * Rank is a positive integer. In v2 (legacy / final phase), rank is 1, 2, or 3.
+ * In v3 (kualifikasi phase), rank is 1..finalisCount. The API layer validates
+ * the range based on lomba.phase and finalisCount.
+ *
  * Returns the pendaftar's (lomba, kategori) so caller can revalidate paths.
  * If pendaftarId doesn't exist, no-op (API layer should validate first).
  */
 export async function setJuaraRank(
   pendaftarId: number,
-  rank: 1 | 2 | 3
-): Promise<{ lombaId: number; kategoriId: string } | null> {
+  rank: number
+): Promise<{ lombaId: number; kategoriId: string; rank: number } | null> {
   await ensureJuaraColumn();
   // Get the (lomba, kategori) of the target pendaftar so the un-pick is scoped
   const p = await get<{ lomba_id: number; kategori_id: string }>(
@@ -309,7 +314,7 @@ export async function setJuaraRank(
     rank,
     pendaftarId
   );
-  return { lombaId: p.lomba_id, kategoriId: p.kategori_id };
+  return { lombaId: p.lomba_id, kategoriId: p.kategori_id, rank };
 }
 
 /**

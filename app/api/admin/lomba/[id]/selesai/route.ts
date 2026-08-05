@@ -1,8 +1,9 @@
-// Selesaikan Lomba API for stage system MVP.
+// Selesaikan Lomba API for stage system v3.
 // POST = mark lomba as 'selesai' (Juara 1/2/3 are finalized).
 //
 // Pre-conditions:
 //  - Lomba status must be 'aktif'
+//  - Lomba.phase must be 'final' (kualifikasi flow) or NULL (legacy v2 path)
 //  - Every eligible kategori must have at least Juara 1 + Juara 2 selected
 //    (Juara 3 is optional — kategori with < 3 pendaftar can skip it)
 import { NextResponse } from "next/server";
@@ -34,6 +35,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       { status: 400 }
     );
   }
+  // v3: kualifikasi must be closed before Selesaikan
+  if (lomba.phase === "kualifikasi") {
+    return NextResponse.json(
+      { error: "Kualifikasi belum ditutup. 'Tutup Kualifikasi' dulu sebelum selesaikan." },
+      { status: 400 }
+    );
+  }
+  // phase='final' or NULL (legacy) — both allowed
 
   // Validate Juara readiness
   const readiness = await getJuaraReadiness(lombaId);

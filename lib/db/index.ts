@@ -41,6 +41,8 @@ export {
   setLombaKategori,
   getJuaraReadiness,
   markLombaSelesai,
+  setLombaPhase,
+  getKualifikasiReadiness,
   type JuaraReadiness,
 } from "./lomba";
 
