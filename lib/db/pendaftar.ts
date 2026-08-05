@@ -1,7 +1,7 @@
 // Pendaftar CRUD + counts + display grouping.
 // Pendaftar is the participant — links to lomba + kategori.
 // Number format: LMB-YYYY-NNNN (auto-incremented per year, no gaps).
-import { all, get, run, type DbRow, type DbValue } from "./client";
+import { all, get, getClient, run, type DbRow, type DbValue } from "./client";
 import { toCamel, toCamelAll } from "./internal";
 import { getKategori } from "./kategori";
 import { ensureJuaraColumn, ensureKualifikasiV4Columns } from "./migrations";
@@ -410,13 +410,25 @@ export async function countJuaraByKategori(
  * to the right lomba, and the kategori is not yet Tutup.
  *
  * @param status 1 = lolos, 0 = gugur, null = reset to pending
+ * Retries on libSQL HTTP schema cache race.
  */
 export async function setFinalist(
   pendaftarId: number,
   status: 0 | 1 | null
 ): Promise<void> {
   await ensureKualifikasiV4Columns();
-  await run("UPDATE pendaftar SET is_finalist = ? WHERE id = ?", status, pendaftarId);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await getClient().execute({
+        sql: "UPDATE pendaftar SET is_finalist = ? WHERE id = ?",
+        args: [status, pendaftarId],
+      });
+      return;
+    } catch (e) {
+      if (attempt === 2) throw e;
+      await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+    }
+  }
 }
 
 /**

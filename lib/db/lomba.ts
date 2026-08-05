@@ -1,7 +1,7 @@
 // Lomba CRUD + PJ (penanggung jawab) management.
 // A lomba has many kategori, each kategori can have multiple PJs (multi-PJ
 // enabled via the (lomba_id, kategori_id, urutan) composite PK — see migrations.ts).
-import { all, get, run, type DbRow } from "./client";
+import { all, get, getClient, run, type DbRow } from "./client";
 import { toCamel, toCamelAll } from "./internal";
 import { ensurePjMultiSupport, ensureKualifikasiColumns, ensureKualifikasiV4Columns } from "./migrations";
 import type { Lomba, LombaKategoriInput, Pj } from "./types";
@@ -293,6 +293,7 @@ export async function getKualifikasiReadiness(lombaId: number): Promise<{
  * (is_finalist IS NOT NULL) before this succeeds.
  *
  * Returns true on success, false if any pendaftar is still pending.
+ * Retries on libSQL HTTP schema cache race (column not visible after ALTER).
  */
 export async function tutupKualifikasiKategori(
   lombaId: number,
@@ -308,13 +309,22 @@ export async function tutupKualifikasiKategori(
     kategoriId
   );
   if ((pendingRow?.c ?? 0) > 0) return false;
-  await run(
-    `UPDATE lomba_kategori SET kualifikasi_tutup_at = ?
-     WHERE lomba_id = ? AND kategori_id = ?`,
-    Date.now(),
-    lombaId,
-    kategoriId
-  );
+  // Use client.execute() directly with retry-on-schema-race. The libSQL
+  // HTTP client sometimes returns stale schema after ALTER; retrying
+  // usually fixes it (a fresh client.execute() will see the new column).
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await getClient().execute({
+        sql: "UPDATE lomba_kategori SET kualifikasi_tutup_at = ? WHERE lomba_id = ? AND kategori_id = ?",
+        args: [Date.now(), lombaId, kategoriId],
+      });
+      return true;
+    } catch (e) {
+      if (attempt === 2) throw e;
+      // Schema race — wait a bit and retry
+      await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+    }
+  }
   return true;
 }
 
@@ -322,6 +332,7 @@ export async function tutupKualifikasiKategori(
  * Re-open Tutup — admin can edit is_finalist again. Only allowed if no
  * Juara 1/2/3 has been picked yet (otherwise we'd silently clear them).
  * Returns true on success, false if Juara already picked.
+ * Retries on libSQL HTTP schema cache race.
  */
 export async function bukaKualifikasiKategori(
   lombaId: number,
@@ -336,11 +347,17 @@ export async function bukaKualifikasiKategori(
     kategoriId
   );
   if ((juaraRow?.c ?? 0) > 0) return false;
-  await run(
-    `UPDATE lomba_kategori SET kualifikasi_tutup_at = NULL
-     WHERE lomba_id = ? AND kategori_id = ?`,
-    lombaId,
-    kategoriId
-  );
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await getClient().execute({
+        sql: "UPDATE lomba_kategori SET kualifikasi_tutup_at = NULL WHERE lomba_id = ? AND kategori_id = ?",
+        args: [lombaId, kategoriId],
+      });
+      return true;
+    } catch (e) {
+      if (attempt === 2) throw e;
+      await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+    }
+  }
   return true;
 }
