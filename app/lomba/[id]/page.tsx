@@ -56,11 +56,17 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
 
   // Public-facing status badge. 6 variants (v2 had 4). Priority:
   //   selesai > juara-terpilih > final > kualifikasi > berlangsung > coming-soon
+  //
+  // Phase-aware Juara readiness: during kualifikasi phase, juara_rank 1..N
+  // means "finalis slot", NOT "Juara 1/2/3". So `readiness.allReady` (which
+  // checks ju1+ju2 counts) is only meaningful in final/legacy phase.
   const totalJuara = Object.values(juaraMap).reduce((sum, arr) => sum + arr.length, 0);
+  const showJuaraTerpilih =
+    l.phase !== "kualifikasi" && readiness.allReady && totalJuara > 0;
   const publicStatus: PublicStatus =
     l.status === "selesai"
       ? "selesai"
-      : readiness.allReady && totalJuara > 0
+      : showJuaraTerpilih
       ? "juara-terpilih"
       : l.phase === "final"
       ? "final"
