@@ -101,6 +101,20 @@ export async function deletePendaftar(id: number): Promise<void> {
   await run("DELETE FROM pendaftar WHERE id = ?", id);
 }
 
+/**
+ * Bulk delete pendaftar rows.
+ *  - scope: "pending" → only rows still awaiting approval (status='pending')
+ *  - scope: "all"     → every row in the table
+ * Returns the number of rows actually deleted.
+ */
+export async function bulkDeletePendaftar(scope: "pending" | "all"): Promise<number> {
+  const sql = scope === "all"
+    ? "DELETE FROM pendaftar"
+    : "DELETE FROM pendaftar WHERE status = 'pending'";
+  const result = await run(sql);
+  return result.changes;
+}
+
 // =================== Counts ===================
 export async function countLombaAktif(): Promise<number> {
   const row = await get<{ c: number }>("SELECT COUNT(*) as c FROM lomba WHERE status = 'aktif'");

@@ -159,6 +159,62 @@ export default function ApprovalClient({
     }
   }
 
+  // Bulk delete: 2 scopes
+  //   - "pending" → clears the approval queue only (preserves approved/rejected)
+  //   - "all"     → nukes everything (used for full reset)
+  // We use a 2-step confirm because the second option is destructive and irreversible.
+  async function bulkDelete(scope: "pending" | "all") {
+    if (liveStats.total === 0) return;
+    const isAll = scope === "all";
+    const pendingN = liveStats.pending;
+    const totalN = liveStats.total;
+    const message = isAll
+      ? `Hapus SEMUA ${totalN} pendaftar (pending + disetujui + ditolak)?\n\nTindakan ini TIDAK bisa dibatalkan.`
+      : `Hapus ${pendingN} pendaftar yang masih menunggu approval?\n\nPendaftar yang sudah disetujui/ditolak TETAP aman.`;
+    const ok = await notify.confirm({
+      title: isAll ? "Hapus Semua Pendaftar" : "Hapus Antrian Approval",
+      message,
+      confirmText: isAll ? `Hapus Semua (${totalN})` : `Hapus Pending (${pendingN})`,
+      variant: "danger",
+    });
+    if (!ok) return;
+    setBusy(-2);
+    try {
+      const res = await fetch(`/api/admin/pendaftar`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal");
+      // Recompute local state from what was actually deleted
+      const removed = Number(data.deleted ?? 0);
+      if (scope === "all") {
+        setItems([]);
+        setLiveStats({ pending: 0, disetujui: 0, ditolak: 0, total: 0 });
+      } else {
+        // All pending rows are gone (the API only deletes status='pending')
+        setItems([]);
+        setLiveStats((prev) => ({
+          ...prev,
+          pending: 0,
+          total: Math.max(0, prev.total - removed),
+        }));
+      }
+      router.refresh();
+      notify.success(
+        isAll
+          ? `${removed} pendaftar berhasil dihapus semua`
+          : `${removed} pendaftar pending berhasil dihapus`
+      );
+    } catch (e) {
+      console.error(e);
+      notify.error("Gagal hapus pendaftar");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <>
       <div className="stats-grid">
@@ -294,11 +350,31 @@ export default function ApprovalClient({
         </div>
         <button
           onClick={bulkApprove}
-          disabled={pendingCount === 0 || busy === -1}
+          disabled={pendingCount === 0 || busy !== null}
           className="btn btn-primary btn-sm disabled:opacity-50 md:w-auto justify-center"
         >
           <i className="fas fa-check-double"></i> Approve Semua ({pendingCount})
         </button>
+        <button
+          onClick={() => bulkDelete("pending")}
+          disabled={liveStats.pending === 0 || busy !== null}
+          title="Hapus pendaftar yang masih menunggu approval (yang sudah disetujui/ditolak tetap aman)"
+          className="btn btn-sm disabled:opacity-50 md:w-auto justify-center"
+          style={{ background: "#FEF2F2", color: "#991B1B", border: "1px solid #FCA5A5" }}
+        >
+          <i className="fas fa-trash-can"></i> <span className="hidden sm:inline">Hapus Antrian</span><span className="sm:hidden">Hapus</span> ({liveStats.pending})
+        </button>
+        {liveStats.total > 0 && (
+          <button
+            onClick={() => bulkDelete("all")}
+            disabled={busy !== null}
+            title="Hapus SEMUA pendaftar (pending + disetujui + ditolak) — tidak bisa dibatalkan"
+            className="btn btn-sm disabled:opacity-50 md:w-auto justify-center"
+            style={{ background: "#FEE2E2", color: "#7F1D1D", border: "1px solid #F87171" }}
+          >
+            <i className="fas fa-triangle-exclamation"></i> <span className="hidden sm:inline">Hapus Semua</span><span className="sm:hidden">Wipe</span> ({liveStats.total})
+          </button>
+        )}
       </div>
 
       {/* Active filter summary */}
@@ -386,7 +462,7 @@ export default function ApprovalClient({
                     <div className="row-actions" style={{ gap: 6 }}>
                       <button
                         onClick={() => setStatus(it.id, "disetujui")}
-                        disabled={busy === it.id || busy === -1}
+                        disabled={busy === it.id || busy === -1 || busy === -2}
                         className="icon-action approve"
                         title="Approve"
                       >
@@ -394,7 +470,7 @@ export default function ApprovalClient({
                       </button>
                       <button
                         onClick={() => setStatus(it.id, "ditolak")}
-                        disabled={busy === it.id || busy === -1}
+                        disabled={busy === it.id || busy === -1 || busy === -2}
                         className="icon-action reject"
                         title="Tolak"
                       >

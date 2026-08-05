@@ -50,6 +50,7 @@ export {
   createPendaftar,
   updatePendaftar,
   deletePendaftar,
+  bulkDeletePendaftar,
   countLombaAktif,
   countPendaftarByStatus,
   countAllPendaftar,
