@@ -16,7 +16,17 @@ type Lomba = LombaFormData & {
   pjByKategori: Record<string, Pj[]>;
 };
 
-export default function LombaClient({ initial, kats, counts }: { initial: Lomba[]; kats: Kat[]; counts: Record<number, number> }) {
+export default function LombaClient({
+  initial,
+  kats,
+  counts,
+  juaraSummary,
+}: {
+  initial: Lomba[];
+  kats: Kat[];
+  counts: Record<number, number>;
+  juaraSummary: Record<number, { totalJuara: number; allReady: boolean }>;
+}) {
   const router = useRouter();
   const notify = useNotify();
   const [items, setItems] = useState(initial);
@@ -138,6 +148,7 @@ export default function LombaClient({ initial, kats, counts }: { initial: Lomba[
               <th>Lomba</th>
               <th>Kategori</th>
               <th>Peserta</th>
+              <th>Juara</th>
               <th>Status</th>
               <th>Aksi</th>
             </tr>
@@ -165,6 +176,33 @@ export default function LombaClient({ initial, kats, counts }: { initial: Lomba[
                       <div className="font-semibold">{counts[l.id] || 0}</div>
                       <div className="text-[10px] text-[#9CA3AF]"><i className="fas fa-infinity"></i> Tanpa batas</div>
                     </div>
+                  </td>
+                  <td data-label="Juara">
+                    {(() => {
+                      const js = juaraSummary[l.id];
+                      if (!js || js.totalJuara === 0) {
+                        return <span className="text-[11px] text-[#9CA3AF]">—</span>;
+                      }
+                      if (l.status === "selesai") {
+                        return (
+                          <span className="lomba-juara-chip done">
+                            <i className="fas fa-trophy"></i> {js.totalJuara} Juara
+                          </span>
+                        );
+                      }
+                      if (js.allReady) {
+                        return (
+                          <span className="lomba-juara-chip ready">
+                            <i className="fas fa-check-circle"></i> {js.totalJuara} Juara
+                          </span>
+                        );
+                      }
+                      return (
+                        <span className="lomba-juara-chip picking">
+                          <i className="fas fa-trophy"></i> {js.totalJuara} dipilih
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td data-label="Status">
                     <button
@@ -199,7 +237,7 @@ export default function LombaClient({ initial, kats, counts }: { initial: Lomba[
               );
             })}
             {items.length === 0 && (
-              <tr><td colSpan={5} className="text-center py-8 text-[#6B7280] empty-state-cell">Belum ada lomba. Klik "Tambah Lomba" untuk mulai.</td></tr>
+              <tr><td colSpan={6} className="text-center py-8 text-[#6B7280] empty-state-cell">Belum ada lomba. Klik "Tambah Lomba" untuk mulai.</td></tr>
             )}
           </tbody>
         </table>

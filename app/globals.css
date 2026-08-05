@@ -475,6 +475,90 @@
 }
 /* =================== End juara picker =================== */
 
+/* =================== Juara public display =================== */
+/* Used on /lomba/[id] for warga. Smaller, simpler than admin picker — just
+   shows medal + name + label, no buttons. */
+.juara-public-block {
+  background: white;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.juara-public-header {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6B7280;
+  background: #F9FAFB;
+  border-bottom: 1px solid #F3F4F6;
+  border-left: 4px solid #E11D1D;
+}
+.juara-public-list {
+  display: flex;
+  flex-direction: column;
+}
+.juara-public-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px;
+  border-top: 1px solid #F3F4F6;
+}
+.juara-public-row:first-child { border-top: none; }
+.juara-public-row.rank-1 { background: linear-gradient(90deg, #FFFBEB 0%, #FFFFFF 70%); }
+.juara-public-row.rank-2 { background: linear-gradient(90deg, #F9FAFB 0%, #FFFFFF 70%); }
+.juara-public-row.rank-3 { background: linear-gradient(90deg, #FEF3C7 0%, #FFFFFF 70%); }
+.juara-medal-icon {
+  font-size: 28px; line-height: 1; flex-shrink: 0;
+}
+.juara-public-nama {
+  font-size: 14px; font-weight: 700; color: #1F2937; line-height: 1.3;
+  word-break: break-word;
+}
+.juara-public-meta {
+  font-size: 11px; color: #6B7280; margin-top: 2px;
+}
+.juara-public-label {
+  flex-shrink: 0;
+  font-size: 10px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  padding: 4px 8px; border-radius: 6px;
+  white-space: nowrap;
+}
+.juara-public-label.rank-1 { background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%); color: white; }
+.juara-public-label.rank-2 { background: linear-gradient(135deg, #C0C0C0 0%, #808080 100%); color: white; }
+.juara-public-label.rank-3 { background: linear-gradient(135deg, #CD7F32 0%, #8B4513 100%); color: white; }
+
+/* Public status badge (hero header) — 4 variants */
+.public-status-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 800;
+  padding: 4px 10px; border-radius: 999px;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  margin-top: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+/* =================== End juara public display =================== */
+
+/* =================== Admin list juara chip =================== */
+/* Small pill in /admin/lomba row showing juara state at a glance. */
+.lomba-juara-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 800;
+  padding: 3px 8px; border-radius: 999px;
+  white-space: nowrap;
+}
+.lomba-juara-chip.picking {
+  background: #FEF3C7; color: #92400E;
+}
+.lomba-juara-chip.ready {
+  background: #DBEAFE; color: #1E40AF;
+}
+.lomba-juara-chip.done {
+  background: #DCFCE7; color: #15803D;
+}
+/* =================== End admin list juara chip =================== */
+
 /* Mobile page styles */
 .mobile-page { min-height: 100vh; display: flex; flex-direction: column; }
 .app-header {

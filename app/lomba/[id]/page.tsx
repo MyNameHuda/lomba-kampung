@@ -1,4 +1,11 @@
-import { getLombaById, getKategori, groupPendaftarForLomba, type DisplaySection } from "@/lib/db";
+import {
+  getLombaById,
+  getKategori,
+  groupPendaftarForLomba,
+  getJuaraByLomba,
+  getJuaraReadiness,
+  type DisplaySection,
+} from "@/lib/db";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getInitials } from "@/lib/format";
@@ -12,16 +19,18 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
   const idNum = Number(id);
   if (isNaN(idNum)) notFound();
   const l = await getLombaById(idNum);
-  if (!l || l.status !== "aktif") notFound();
+  if (!l || l.status === "draft") notFound();
 
-  // Parallelize: kats and groups are independent after we have `l`
-  const [kats, groups] = await Promise.all([
+  // Parallelize: kats, groups, juara, readiness are all independent after `l`
+  const [kats, groups, juaraMap, readiness] = await Promise.all([
     getKategori(),
     groupPendaftarForLomba(idNum),
+    getJuaraByLomba(idNum),
+    getJuaraReadiness(idNum),
   ]);
   const katMap = new Map(kats.map((k) => [k.id, k]));
+
   // Flatten pjByKategori into per-PJ entries (one row per PJ, multiple allowed per kategori).
-  // Order: kategoriEligible first, then urutan within each kategori (server already returns sorted).
   const pjEntries: Array<{ katId: string; pj: { nama: string; kontak: string | null } }> = [];
   for (const katId of (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])) {
     const list = l.pjByKategori?.[katId] || [];
@@ -32,6 +41,17 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
 
   const totalPeserta = groups.sections.reduce((sum, s) => sum + s.peserta.length, 0);
 
+  // Public-facing status badge. Derive "Juara Terpilih!" when all eligible
+  // kategori have Juara 1+2 even if lomba.status is still 'aktif' (i.e. admin
+  // hasn't clicked "Selesaikan" yet but the Juara are visible to warga anyway).
+  const totalJuara = Object.values(juaraMap).reduce((sum, arr) => sum + arr.length, 0);
+  const publicStatus: "coming-soon" | "berlangsung" | "juara-terpilih" | "selesai" =
+    l.status === "selesai"
+      ? "selesai"
+      : readiness.allReady && totalJuara > 0
+      ? "juara-terpilih"
+      : "berlangsung";
+
   return (
     <div className="mobile-page">
       <div className="detail-hero">
@@ -40,9 +60,10 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
         </Link>
         <span className="text-6xl block mb-3">{l.emoji}</span>
         <h1 className="text-[22px] font-extrabold mb-1">{l.nama}</h1>
-        <span className="inline-block bg-white/20 px-3 py-1 rounded-full text-[11px] font-semibold">
+        <span className="inline-block bg-white/20 px-3 py-1 rounded-full text-[11px] font-semibold mb-2">
           {l.kategoriEligible.map((k) => katMap.get(k)?.nama).filter(Boolean).join(" · ")}
         </span>
+        <PublicStatusBadge status={publicStatus} />
       </div>
 
       <main className="app-content">
@@ -74,7 +95,6 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
           <div className="space-y-2.5 mt-2">
             {pjEntries.map(({ katId, pj }, idx) => {
               const kat = katMap.get(katId);
-              // Show kategori label on the first PJ of each kategori (avoids repetition).
               const prevEntry = idx > 0 ? pjEntries[idx - 1] : null;
               const showKatLabel = !prevEntry || prevEntry.katId !== katId;
               return (
@@ -112,6 +132,52 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
+        {/* Juara section — shown whenever at least 1 Juara is picked */}
+        {totalJuara > 0 && (
+          <div className="info-section">
+            <h3 className="text-[13px] font-bold mb-3 text-[#1F2937] flex items-center gap-2">
+              <i className="fas fa-trophy text-[#FFD700]"></i> Juara
+              <span className="ml-auto text-[11px] font-normal text-[#6B7280]">
+                {totalJuara} terpilih
+              </span>
+            </h3>
+            <div className="space-y-3">
+              {Array.isArray(l.kategoriEligible) ? l.kategoriEligible.map((kid) => {
+                const juaraList = juaraMap[kid] || [];
+                if (juaraList.length === 0) return null;
+                const kat = katMap.get(kid);
+                return (
+                  <div key={kid} className="juara-public-block">
+                    <div className="juara-public-header" style={{ borderLeftColor: kat?.colorBorder || "#E11D1D" }}>
+                      {kat?.nama || kid}
+                    </div>
+                    <div className="juara-public-list">
+                      {juaraList
+                        .sort((a, b) => a.juaraRank - b.juaraRank)
+                        .map((j) => (
+                          <div key={j.pendaftarId} className={`juara-public-row rank-${j.juaraRank}`}>
+                            <span className="juara-medal-icon">
+                              {j.juaraRank === 1 ? "🥇" : j.juaraRank === 2 ? "🥈" : "🥉"}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <div className="juara-public-nama">{j.nama}</div>
+                              <div className="juara-public-meta">
+                                {j.jenisKelamin === "L" ? "♂ Laki-laki" : "♀ Perempuan"} · {j.umur} tahun
+                              </div>
+                            </div>
+                            <span className={`juara-public-label rank-${j.juaraRank}`}>
+                              Juara {j.juaraRank}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                );
+              }) : null}
+            </div>
+          </div>
+        )}
+
         {/* Peserta Terdaftar */}
         <div className="info-section">
           <h3 className="text-[13px] font-bold mb-3 text-[#1F2937] flex items-center gap-2">
@@ -141,12 +207,32 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
         </div>
       </main>
 
-      <div className="sticky-cta">
-        <Link href={`/lomba/${l.id}/daftar`} className="btn btn-primary btn-block">
-          <i className="fas fa-pen-to-square"></i> Daftar Sekarang
-        </Link>
-      </div>
+      {/* CTA — only show for aktif lomba (not selesai) */}
+      {l.status === "aktif" && (
+        <div className="sticky-cta">
+          <Link href={`/lomba/${l.id}/daftar`} className="btn btn-primary btn-block">
+            <i className="fas fa-pen-to-square"></i> Daftar Sekarang
+          </Link>
+        </div>
+      )}
     </div>
+  );
+}
+
+// =================== Public status badge ===================
+// Derive from lomba.status + Juara readiness. 4 variants for warga.
+function PublicStatusBadge({ status }: { status: "coming-soon" | "berlangsung" | "juara-terpilih" | "selesai" }) {
+  const config: Record<typeof status, { label: string; icon: string; className: string }> = {
+    "coming-soon": { label: "Coming Soon", icon: "fa-clock", className: "bg-white/20 text-white" },
+    "berlangsung": { label: "Sedang Berlangsung", icon: "fa-circle-play", className: "bg-[#FBBF24] text-[#92400E]" },
+    "juara-terpilih": { label: "Juara Terpilih!", icon: "fa-trophy", className: "bg-[#3B82F6] text-white" },
+    "selesai": { label: "Selesai", icon: "fa-check-circle", className: "bg-[#22C55E] text-white" },
+  };
+  const c = config[status];
+  return (
+    <span className={`public-status-badge ${c.className}`}>
+      <i className={`fas ${c.icon}`}></i> {c.label}
+    </span>
   );
 }
 
