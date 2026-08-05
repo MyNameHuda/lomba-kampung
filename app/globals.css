@@ -1,4 +1,4 @@
-@tailwind base;
+﻿@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -678,3 +678,47 @@
 .info-section { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 18px; margin-bottom: 14px; line-height: 1.5; }
 .info-section h3 { line-height: 1.4; }
 .sticky-cta { position: sticky; bottom: 0; background: white; padding: 14px 20px; border-top: 1px solid #E5E7EB; z-index: 10; }
+
+/* =================== Stage system v4 — Kualifikasi tabs =================== */
+.kual-tabs {
+  display: flex; gap: 6px; overflow-x: auto;
+  padding: 4px 2px;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+.kual-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 12px; border-radius: 999px;
+  background: white; border: 2px solid #E5E7EB;
+  font-size: 12px; font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer; transition: all 0.15s;
+  color: #374151;
+}
+.kual-tab:hover { background: #F9FAFB; }
+.kual-tab.active {
+  background: #FEF2F2;
+  border-color: #E11D1D;
+  color: #1F2937;
+  box-shadow: 0 1px 4px rgba(225, 29, 29, 0.15);
+}
+.kual-tab-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 999px;
+  font-size: 11px;
+}
+.kual-tab-label { font-weight: 700; }
+.kual-tab-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: 999px; font-size: 10px; font-weight: 800;
+}
+.kual-tab-badge.pending { background: #FEF3C7; color: #92400E; }
+.kual-tab-badge.ready { background: #DCFCE7; color: #15803D; }
+.kual-tab-badge.tutup { background: #DBEAFE; color: #1E40AF; }
+
+.kual-actions {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; background: #F9FAFB; border-radius: 8px;
+  border: 1px dashed #D1D5DB;
+}

@@ -1,11 +1,11 @@
-// Selesaikan Lomba API for stage system v3.
+// Selesaikan Lomba API for stage system v4.
 // POST = mark lomba as 'selesai' (Juara 1/2/3 are finalized).
 //
-// Pre-conditions:
+// Pre-conditions (v4):
 //  - Lomba status must be 'aktif'
-//  - Lomba.phase must be 'final' (kualifikasi flow) or NULL (legacy v2 path)
-//  - Every eligible kategori must have at least Juara 1 + Juara 2 selected
-//    (Juara 3 is optional — kategori with < 3 pendaftar can skip it)
+//  - EVERY eligible kategori (with at least 1 finalist) must have Juara 1 + Juara 2
+//    selected (Juara 3 is optional — kategori with < 3 finalists can skip it)
+//  - v4 doesn't use lomba.phase — kualifikasi state is per-kategori.
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { isAuthenticated } from "@/lib/auth";
@@ -35,16 +35,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       { status: 400 }
     );
   }
-  // v3: kualifikasi must be closed before Selesaikan
-  if (lomba.phase === "kualifikasi") {
-    return NextResponse.json(
-      { error: "Kualifikasi belum ditutup. 'Tutup Kualifikasi' dulu sebelum selesaikan." },
-      { status: 400 }
-    );
-  }
-  // phase='final' or NULL (legacy) — both allowed
 
-  // Validate Juara readiness
+  // Validate Juara readiness (v4: same per-kategori Juara 1+2 check)
   const readiness = await getJuaraReadiness(lombaId);
   if (!readiness.allReady) {
     return NextResponse.json(
@@ -71,3 +63,4 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   return NextResponse.json({ ok: true, lombaId });
 }
+

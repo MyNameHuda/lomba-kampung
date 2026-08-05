@@ -54,35 +54,37 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
 
   const totalPeserta = groups.sections.reduce((sum, s) => sum + s.peserta.length, 0);
 
-  // Public-facing status badge. 6 variants (v2 had 4). Priority:
-  //   selesai > juara-terpilih > final > kualifikasi > berlangsung > coming-soon
-  //
-  // Phase-aware Juara readiness: during kualifikasi phase, juara_rank 1..N
-  // means "finalis slot", NOT "Juara 1/2/3". So `readiness.allReady` (which
-  // checks ju1+ju2 counts) is only meaningful in final/legacy phase.
+  // Public-facing status badge. v4: phase is derived from per-kategori Tutup state.
+  //   - selesai > juara-terpilih > final > kualifikasi > berlangsung > coming-soon
   const totalJuara = Object.values(juaraMap).reduce((sum, arr) => sum + arr.length, 0);
-  const showJuaraTerpilih =
-    l.phase !== "kualifikasi" && readiness.allReady && totalJuara > 0;
+  // Derive global phase from per-kategori tutup state
+  const eligibleKategori = Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [];
+  const tutupMap = l.kategoriTutupAt || {};
+  const allKategoriTutup = eligibleKategori.length > 0 && eligibleKategori.every((kid) => !!tutupMap[kid]);
+  const anyKategoriTutup = eligibleKategori.some((kid) => !!tutupMap[kid]);
+  const hasPendaftar = totalPeserta > 0;
+  // v4: Juara 1+2 readiness
+  const showJuaraTerpilih = readiness.allReady && totalJuara > 0;
   const publicStatus: PublicStatus =
     l.status === "selesai"
       ? "selesai"
       : showJuaraTerpilih
       ? "juara-terpilih"
-      : l.phase === "final"
+      : allKategoriTutup
       ? "final"
-      : l.phase === "kualifikasi"
+      : anyKategoriTutup
+      ? "final"  // some kategori in final phase
+      : hasPendaftar && eligibleKategori.length > 0
       ? "kualifikasi"
-      : "berlangsung";
+      : "berlangsung"; // no eligibleKategori OR no pendaftar yet
 
-  // Finalis名单 — for each eligible kategori, collect finalists (those with
-  // juara_rank 1..finalisCount). Build a quick lookup: pendaftarId → Juara rank
-  // (1, 2, 3 if Juara, else 1..finalisCount for finalists without Juara).
+  // Finalis名单 — for each eligible kategori, collect finalists (is_finalist = 1).
   const finalisByKategori: Record<string, Array<{
     pendaftarId: number;
     nama: string;
     umur: number;
     jenisKelamin: "L" | "P";
-    juaraRank: number | null; // 1, 2, 3 if Juara; 1..finalisCount for non-Juara finalists
+    juaraRank: number | null; // 1, 2, 3 if Juara; null if just finalist
   }>> = {};
 
   // Map: pendaftarId → Juara rank (1, 2, 3 only) from getJuaraByLomba
@@ -91,35 +93,32 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
     for (const j of arr) juaraRankById.set(j.pendaftarId, j.juaraRank);
   }
 
-  for (const katId of (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])) {
+  for (const katId of eligibleKategori) {
     const finalists = allDisetujui
-      .filter((p) => p.kategoriId === katId)
+      .filter((p) => p.kategoriId === katId && p.isFinalist === 1)
       .map((p) => ({
         pendaftarId: p.id,
         nama: p.nama,
         umur: p.umur,
         jenisKelamin: p.jenisKelamin,
-        // Use Juara rank (1,2,3) if picked, else fall back to the kualifikasi
-        // rank value (1..finalisCount) so the UI can sort consistently.
-        juaraRank: juaraRankById.get(p.id) ?? ((p.juaraRank as number | null) ?? null),
+        juaraRank: juaraRankById.get(p.id) ?? null,
       }))
-      .filter((f) => f.juaraRank !== null && f.juaraRank <= l.finalisCount)
       // Sort: Juara 1/2/3 first (by rank ASC), then non-Juara finalists by umur ASC
       .sort((a, b) => {
-        const aIsJuara = a.juaraRank! <= 3 ? 0 : 1;
-        const bIsJuara = b.juaraRank! <= 3 ? 0 : 1;
+        const aIsJuara = a.juaraRank !== null ? 0 : 1;
+        const bIsJuara = b.juaraRank !== null ? 0 : 1;
         if (aIsJuara !== bIsJuara) return aIsJuara - bIsJuara;
-        if (aIsJuara === 0) return a.juaraRank! - b.juaraRank!; // Juara 1, 2, 3 in order
-        return a.umur - b.umur; // finalists: younger first
+        if (aIsJuara === 0 && bIsJuara === 0) return a.juaraRank! - b.juaraRank!;
+        return a.umur - b.umur;
       });
     finalisByKategori[katId] = finalists;
   }
 
   // Total finalists across all kategori
   const totalFinalis = Object.values(finalisByKategori).reduce((sum, arr) => sum + arr.length, 0);
-  // Show finalis section when: phase=final OR status=selesai (i.e. Juara picking started)
-  // AND we have at least 1 finalist. Per spec: TIDAK tampil during kualifikasi.
-  const showFinalis = (l.phase === "final" || l.status === "selesai") && totalFinalis > 0;
+  // Show finalis section when: at least 1 kategori is Tutup (kualifikasi done for that kategori)
+  // AND we have at least 1 finalist. Per spec: TIDAK tampil during full kualifikasi.
+  const showFinalis = anyKategoriTutup && totalFinalis > 0;
 
   return (
     <div className="mobile-page">

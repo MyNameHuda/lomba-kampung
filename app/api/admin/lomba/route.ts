@@ -21,8 +21,9 @@ const lombaSchema = z.object({
   pjList: z.array(pjSchema).min(1).max(30),
   status: z.enum(["draft", "aktif", "selesai"]).default("aktif"),
   urutan: z.number().int().min(0).default(0),
-  // Stage system v3 — how many finalists per kategori advance from kualifikasi to final.
-  finalisCount: z.number().int().min(1).max(50).default(5),
+  // v4: finalisCount removed — admin decides finalists per-pendaftar (Loloskan/Gugur).
+  // Kept as optional for back-compat with existing payloads, but ignored.
+  finalisCount: z.number().int().min(1).max(50).optional(),
 });
 
 // Note: lomba.pj_nama and pj_kontak are no longer used; pj per kategori lives in lomba_kategori table.
@@ -81,7 +82,8 @@ export async function POST(req: Request) {
       kategoriEligible: data.kategoriEligible,
       status: data.status,
       urutan: data.urutan,
-      finalisCount: data.finalisCount,
+      // v4: phase removed, finalisCount ignored (column still exists for back-compat)
+      finalisCount: 5,
       phase: null,
     });
     await setLombaKategori(id, data.pjList.map((p) => ({
