@@ -19,6 +19,9 @@ const lombaSchema = z.object({
   pjList: z.array(pjSchema).min(1).max(30).optional(),
   status: z.enum(["draft", "aktif", "selesai"]).optional(),
   urutan: z.number().int().min(0).optional(),
+  // Stage system v3 — finalis_count is editable but be careful: changing it
+  // after kualifikasi is done may invalidate existing finalist counts.
+  finalisCount: z.number().int().min(1).max(50).optional(),
 });
 
 // Note: pj_nama / pj_kontak on lomba are no longer used (lomba_kategori owns pj per-kategori).

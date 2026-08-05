@@ -73,6 +73,7 @@ export default function LombaClient({
           kategoriEligible: data.kategoriEligible,
           status: data.status,
           urutan: data.urutan,
+          finalisCount: data.finalisCount,
           pjByKategori: pjMap,
         };
         setItems((prev) => [...prev, newLocal]);

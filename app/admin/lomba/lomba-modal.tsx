@@ -15,6 +15,9 @@ export type LombaFormData = {
   kategoriEligible: string[];
   status: "draft" | "aktif" | "selesai";
   urutan: number;
+  // Stage system v3 — kualifikasi config. How many finalists per kategori
+  // advance from kualifikasi to final (range 1-50, default 5).
+  finalisCount: number;
 };
 
 const EMOJI_OPTIONS = ["🏆", "🍪", "🏃", "🪢", "🌴", "💧", "🎤", "🪑", "🥚", "🎯", "🏐", "🎲", "🎨", "🎭", "📚", "🚌"];
@@ -27,6 +30,7 @@ const EMPTY_LOMBA: Omit<LombaFormData, "id"> = {
   kategoriEligible: [],
   status: "aktif",
   urutan: 0,
+  finalisCount: 5,
 };
 
 const MAX_PJ_PER_KAT = APP_CONFIG.MAX_PJ_PER_KAT;
@@ -67,6 +71,7 @@ export default function LombaModal({
   });
   const [status, setStatus] = useState<LombaFormData["status"]>(editing?.status || "aktif");
   const [urutan, setUrutan] = useState(editing?.urutan ?? nextUrutan);
+  const [finalisCount, setFinalisCount] = useState<number>(editing?.finalisCount ?? 5);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -123,6 +128,9 @@ export default function LombaModal({
     setErr("");
     if (!nama.trim()) { setErr("Nama lomba wajib diisi"); return; }
     if (kategoriEligible.length === 0) { setErr("Pilih minimal 1 kategori"); return; }
+    if (finalisCount < 1 || finalisCount > 50) {
+      setErr("Finalis per kategori harus 1-50"); return;
+    }
     // Validate: each eligible kategori has ≥1 PJ with non-empty nama
     for (const katId of kategoriEligible) {
       const list = pjByKategori[katId] || [];
@@ -160,6 +168,7 @@ export default function LombaModal({
         pjList,
         status,
         urutan,
+        finalisCount,
       });
     } finally {
       setSaving(false);
@@ -290,7 +299,7 @@ export default function LombaModal({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="label">Status</label>
               <select className="input" value={status} onChange={(e) => setStatus(e.target.value as LombaFormData["status"])}>
@@ -298,6 +307,10 @@ export default function LombaModal({
                 <option value="draft">Draft</option>
                 <option value="selesai">Selesai</option>
               </select>
+            </div>
+            <div>
+              <label className="label">Finalis<span className="text-[10px] text-[#6B7280] ml-1 font-normal">per kategori</span></label>
+              <input type="number" className="input" min={1} max={50} value={finalisCount} onChange={(e) => setFinalisCount(Math.max(1, Math.min(50, Number(e.target.value) || 1)))} />
             </div>
             <div>
               <label className="label">Urutan Tampil</label>

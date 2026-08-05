@@ -21,6 +21,8 @@ const lombaSchema = z.object({
   pjList: z.array(pjSchema).min(1).max(30),
   status: z.enum(["draft", "aktif", "selesai"]).default("aktif"),
   urutan: z.number().int().min(0).default(0),
+  // Stage system v3 — how many finalists per kategori advance from kualifikasi to final.
+  finalisCount: z.number().int().min(1).max(50).default(5),
 });
 
 // Note: lomba.pj_nama and pj_kontak are no longer used; pj per kategori lives in lomba_kategori table.
@@ -79,7 +81,7 @@ export async function POST(req: Request) {
       kategoriEligible: data.kategoriEligible,
       status: data.status,
       urutan: data.urutan,
-      finalisCount: 5, // default; admin can edit later via PATCH (TODO: add field to modal in commit 3)
+      finalisCount: data.finalisCount,
       phase: null,
     });
     await setLombaKategori(id, data.pjList.map((p) => ({
