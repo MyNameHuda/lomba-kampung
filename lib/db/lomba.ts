@@ -3,7 +3,7 @@
 // enabled via the (lomba_id, kategori_id, urutan) composite PK — see migrations.ts).
 import { all, get, run, type DbRow } from "./client";
 import { toCamel, toCamelAll } from "./internal";
-import { ensurePjMultiSupport } from "./migrations";
+import { ensurePjMultiSupport, ensureKualifikasiColumns } from "./migrations";
 import type { Lomba, LombaKategoriInput, Pj } from "./types";
 
 // Load pjByKategori for many lomba at once (avoid N+1).
@@ -30,6 +30,7 @@ function attachPj<T extends { id: number }>(row: T, pjBulk: Map<number, Record<s
 
 // =================== Read ===================
 export async function getLomba(includeInactive = false): Promise<Lomba[]> {
+  await ensureKualifikasiColumns();
   const sql = includeInactive
     ? "SELECT * FROM lomba ORDER BY urutan"
     : "SELECT * FROM lomba WHERE status = 'aktif' ORDER BY urutan";
@@ -39,6 +40,7 @@ export async function getLomba(includeInactive = false): Promise<Lomba[]> {
 }
 
 export async function getLombaById(id: number): Promise<Lomba | null> {
+  await ensureKualifikasiColumns();
   const row = toCamel<Lomba>(await get<DbRow>("SELECT * FROM lomba WHERE id = ?", id));
   if (!row) return null;
   const pjBulk = await loadPjBulk();
@@ -46,6 +48,7 @@ export async function getLombaById(id: number): Promise<Lomba | null> {
 }
 
 export async function getLombaWithCount(): Promise<{ id: number; nama: string; emoji: string; count: number; pjByKategori: Record<string, Pj[]> }[]> {
+  await ensureKualifikasiColumns();
   const rows = await all<DbRow>(`
     SELECT l.id, l.nama, l.emoji, COUNT(p.id) as count
     FROM lomba l
@@ -65,6 +68,7 @@ export async function getLombaWithCount(): Promise<{ id: number; nama: string; e
 
 // =================== Write ===================
 export async function createLomba(data: Omit<Lomba, "id" | "createdAt" | "pjByKategori">): Promise<number> {
+  await ensureKualifikasiColumns();
   const result = await run(
     `INSERT INTO lomba (nama, emoji, deskripsi, syarat, kategori_eligible, status, urutan, finalis_count, phase)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
