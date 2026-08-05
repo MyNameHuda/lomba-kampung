@@ -91,6 +91,40 @@ export default function ApprovalClient({
     });
   }, [items, search, filterLombaId, filterKategoriId]);
 
+  // Group visible items by lombaId for the card layout. Section order matches
+  // the order items arrive in (newest first via DB ORDER BY created_at DESC),
+  // so a freshly-arrived pendaftar shows up in its lomba's section at the top.
+  // Returns Array (not Map) so React keys stay stable and we can .map().
+  const groupedByLomba = useMemo(() => {
+    const order: number[] = [];
+    const groups = new Map<number, Item[]>();
+    for (const it of visible) {
+      if (!groups.has(it.lombaId)) {
+        groups.set(it.lombaId, []);
+        order.push(it.lombaId);
+      }
+      groups.get(it.lombaId)!.push(it);
+    }
+    return order
+      .map((id) => {
+        const arr = groups.get(id)!;
+        const first = arr[0];
+        return {
+          lombaId: id,
+          lombaNama: first.lombaNama,
+          lombaEmoji: first.lombaEmoji,
+          items: arr,
+        };
+      });
+  }, [visible]);
+
+  // Lookup map for kategori colors (used as left-border accent on each card)
+  const katById = useMemo(() => {
+    const m = new Map<string, KategoriSlim>();
+    for (const k of kategoriList) m.set(k.id, k);
+    return m;
+  }, [kategoriList]);
+
   const pendingCount = items.length;
   const visibleCount = visible.length;
   const activeLomba = filterLombaId ? lombaList.find((l) => l.id === filterLombaId) : null;
@@ -370,119 +404,121 @@ export default function ApprovalClient({
         {visibleCount} dari {pendingCount} pendaftar ditampilkan
       </div>
 
-      <div className="card overflow-hidden">
-        <table className="admin-table mobile-card-table">
-          <thead>
-            <tr>
-              <th style={{ width: 40 }}><input type="checkbox" disabled /></th>
-              <th>Pendaftar</th>
-              <th>Lomba</th>
-              <th>Kategori</th>
-              <th>Waktu</th>
-              <th>Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((it) => {
-              const initials = getInitials(it.nama);
-              return (
-                <tr key={it.id}>
-                  <td className="cell-checkbox"><input type="checkbox" disabled /></td>
-                  <td className="cell-primary" data-label="Pendaftar">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent text-white flex items-center justify-center text-[12px] font-bold flex-shrink-0">{initials}</div>
-                      <div className="flex flex-col gap-0.5 leading-snug">
-                        <div className="font-semibold text-[13px]">{it.nama}</div>
-                        {it.noWa && <div className="text-[11px] text-[#6B7280]">📞 {it.noWa}</div>}
+      {visible.length === 0 ? (
+        <div className="card p-8 text-center">
+          {search.trim() || filterLombaId || filterKategoriId ? (
+            <div className="flex flex-col items-center gap-2.5 leading-relaxed max-w-[360px] mx-auto">
+              <i className="fas fa-filter text-4xl text-[#D1D5DB] mb-1"></i>
+              <strong className="block text-[#1F2937] text-base">Tidak ada hasil</strong>
+              <span className="text-sm">Coba reset filter atau ganti kata kunci pencarian.</span>
+              <button
+                onClick={() => { setSearch(""); setFilterLombaId(null); setFilterKategoriId(null); }}
+                className="inline-block mt-3 px-5 py-2.5 bg-primary-light text-primary rounded-lg font-semibold text-sm hover:bg-[#FBE0E0] transition-all whitespace-nowrap"
+              >
+                Reset semua filter
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2.5 leading-relaxed max-w-[360px] mx-auto">
+              <i className="fas fa-check-circle text-5xl text-[#FBE0E0] mb-2"></i>
+              <strong className="block text-[#9D1010] text-base">Semua bersih!</strong>
+              <span className="text-sm">Tidak ada pendaftar yang menunggu approval.</span>
+              <Link
+                href="/admin/peserta"
+                className="inline-block mt-3 px-5 py-2.5 bg-primary-light text-primary rounded-lg font-semibold text-sm no-underline hover:bg-[#FBE0E0] transition-all whitespace-nowrap"
+              >
+                Lihat daftar peserta →
+              </Link>
+            </div>
+          )}
+        </div>
+      ) : (
+        // Group cards by lomba. Each section has a sticky header so the user
+        // always knows which lomba they're scrolling through. LombaTipe is
+        // dropped (it was metadata that didn't help with the actual review
+        // decision). Left border accent on each card uses the kategori color.
+        <div>
+          {groupedByLomba.map((group) => (
+            <section key={group.lombaId} className="lomba-section">
+              <header className="lomba-section-header">
+                <span className="ls-emoji">{group.lombaEmoji}</span>
+                <span className="ls-nama">{group.lombaNama}</span>
+                <span className="ls-count">{group.items.length}</span>
+              </header>
+              <div>
+                {group.items.map((it) => {
+                  const initials = getInitials(it.nama);
+                  const kat = katById.get(it.kategoriId);
+                  const accent = kat?.colorBorder || kat?.colorBg || "#E5E7EB";
+                  return (
+                    <article
+                      key={it.id}
+                      className="pendaftar-card"
+                      style={{ ["--accent" as string]: accent }}
+                    >
+                      <div className="pc-top">
+                        <div className="pc-avatar">{initials}</div>
+                        <div className="pc-identity">
+                          <div className="pc-nama">{it.nama}</div>
+                          {it.noWa && (
+                            <a
+                              href={`https://wa.me/${it.noWa.replace(/\D/g, "")}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="pc-wa"
+                            >
+                              <i className="fab fa-whatsapp"></i> {it.noWa}
+                            </a>
+                          )}
+                        </div>
+                        <div className="pc-actions">
+                          <button
+                            onClick={() => setStatus(it.id, "disetujui")}
+                            disabled={busy === it.id || busy === -2}
+                            className="icon-action approve"
+                            title="Setujui"
+                            aria-label="Setujui"
+                          >
+                            <i className="fas fa-check"></i>
+                          </button>
+                          <button
+                            onClick={() => setStatus(it.id, "ditolak")}
+                            disabled={busy === it.id || busy === -2}
+                            className="icon-action reject"
+                            title="Tolak"
+                            aria-label="Tolak"
+                          >
+                            <i className="fas fa-times"></i>
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td data-label="Lomba">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-lg leading-none">{it.lombaEmoji}</span>
-                      <div className="flex flex-col gap-1 leading-snug">
-                        <div className="font-semibold">{it.lombaNama}</div>
-                        <div className="text-[11px] text-[#6B7280]">{it.lombaTipe}</div>
+                      <div className="pc-divider" />
+                      <div className="pc-meta">
+                        <span className="pc-meta-item">
+                          <KatTag
+                            nama={it.kategori}
+                            colorBg={kat?.colorBg}
+                            colorText={kat?.colorText}
+                            colorBorder={kat?.colorBorder}
+                            size="sm"
+                          />
+                        </span>
+                        <span className="pc-meta-item">
+                          <i className={`fas ${it.jenisKelamin === "L" ? "fa-mars text-[#3B82F6]" : "fa-venus text-[#EC4899]"}`}></i>
+                          {it.jenisKelamin === "L" ? "Laki-laki" : "Perempuan"} · {it.umur} tahun
+                        </span>
+                        <span className="pc-time" title={dateFmt(it.createdAt)}>
+                          <i className="far fa-clock"></i> {timeAgo(it.createdAt)}
+                        </span>
                       </div>
-                    </div>
-                  </td>
-                  <td data-label="Kategori">
-                    <KatTag nama={it.kategori} />
-                  </td>
-                  <td data-label="Waktu">
-                    <div className="flex flex-col gap-0.5 leading-snug">
-                      <div>{timeAgo(it.createdAt)}</div>
-                      <div className="text-[11px] text-[#6B7280]">{dateFmt(it.createdAt)}</div>
-                    </div>
-                  </td>
-                  <td className="cell-actions" data-label="Aksi">
-                    <div className="row-actions" style={{ gap: 6 }}>
-                      <button
-                        onClick={() => setStatus(it.id, "disetujui")}
-                        disabled={busy === it.id || busy === -2}
-                        className="icon-action approve"
-                        title="Approve"
-                      >
-                        <i className="fas fa-check"></i>
-                      </button>
-                      <button
-                        onClick={() => setStatus(it.id, "ditolak")}
-                        disabled={busy === it.id || busy === -2}
-                        className="icon-action reject"
-                        title="Tolak"
-                      >
-                        <i className="fas fa-times"></i>
-                      </button>
-                      {it.noWa && (
-                        <a
-                          href={`https://wa.me/${it.noWa.replace(/\D/g, "")}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="icon-action"
-                          title="Chat WhatsApp"
-                        >
-                          <i className="fab fa-whatsapp"></i>
-                        </a>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            {visible.length === 0 && (
-              <tr>
-                <td colSpan={6} className="text-center py-14 px-6 text-[#6B7280] empty-state-cell">
-                  {search.trim() || filterLombaId || filterKategoriId ? (
-                    <div className="flex flex-col items-center gap-2.5 leading-relaxed max-w-[360px] mx-auto">
-                      <i className="fas fa-filter text-4xl text-[#D1D5DB] mb-1"></i>
-                      <strong className="block text-[#1F2937] text-base">Tidak ada hasil</strong>
-                      <span className="text-sm">Coba reset filter atau ganti kata kunci pencarian.</span>
-                      <button
-                        onClick={() => { setSearch(""); setFilterLombaId(null); setFilterKategoriId(null); }}
-                        className="inline-block mt-3 px-5 py-2.5 bg-primary-light text-primary rounded-lg font-semibold text-sm hover:bg-[#FBE0E0] transition-all whitespace-nowrap"
-                      >
-                        Reset semua filter
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-2.5 leading-relaxed max-w-[360px] mx-auto">
-                      <i className="fas fa-check-circle text-5xl text-[#FBE0E0] mb-2"></i>
-                      <strong className="block text-[#9D1010] text-base">Semua bersih!</strong>
-                      <span className="text-sm">Tidak ada pendaftar yang menunggu approval.</span>
-                      <Link
-                        href="/admin/peserta"
-                        className="inline-block mt-3 px-5 py-2.5 bg-primary-light text-primary rounded-lg font-semibold text-sm no-underline hover:bg-[#FBE0E0] transition-all whitespace-nowrap"
-                      >
-                        Lihat daftar peserta →
-                      </Link>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
     </>
   );
 }
