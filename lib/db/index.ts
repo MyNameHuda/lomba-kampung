@@ -39,6 +39,9 @@ export {
   updateLomba,
   deleteLomba,
   setLombaKategori,
+  getJuaraReadiness,
+  markLombaSelesai,
+  type JuaraReadiness,
 } from "./lomba";
 
 // Pendaftar

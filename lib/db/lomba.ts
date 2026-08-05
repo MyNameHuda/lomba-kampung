@@ -127,3 +127,50 @@ export async function deleteLomba(id: number): Promise<void> {
   await run("DELETE FROM pendaftar WHERE lomba_id = ?", id);
   await run("DELETE FROM lomba WHERE id = ?", id);
 }
+
+// =================== Juara readiness (stage system MVP) ===================
+// Check if a lomba is ready to be "Selesaikan" — meaning every eligible
+// kategori has at least Juara 1 + Juara 2 selected (Juara 3 is optional
+// since some kategori may have < 3 pendaftar).
+import { countJuaraByKategori } from "./pendaftar";
+
+export type JuaraReadiness = {
+  allReady: boolean;
+  // List of kategori ids that are missing Juara 1 or Juara 2
+  missingKategori: string[];
+  // Per-kategori breakdown for UI display
+  perKategori: Record<string, { ju1: number; ju2: number; ju3: number }>;
+};
+
+export async function getJuaraReadiness(lombaId: number): Promise<JuaraReadiness> {
+  const lomba = await getLombaById(lombaId);
+  if (!lomba) {
+    return { allReady: false, missingKategori: [], perKategori: {} };
+  }
+  const perKategori: Record<string, { ju1: number; ju2: number; ju3: number }> = {};
+  const missingKategori: string[] = [];
+  // Only check kategori that are eligible for this lomba AND actually have
+  // at least 1 disetujui pendaftar (kategori with 0 peserta are skipped —
+  // a lomba with 0 peserta can't be "Selesaikan" but is also not actionable).
+  for (const katId of lomba.kategoriEligible) {
+    const counts = await countJuaraByKategori(lombaId, katId);
+    perKategori[katId] = { ju1: counts[1], ju2: counts[2], ju3: counts[3] };
+    if (counts[1] < 1 || counts[2] < 1) {
+      missingKategori.push(katId);
+    }
+  }
+  return {
+    allReady: missingKategori.length === 0,
+    missingKategori,
+    perKategori,
+  };
+}
+
+// Mark a lomba as "selesai". Caller should have already validated readiness
+// via getJuaraReadiness — this is the atomic "commit" step.
+export async function markLombaSelesai(lombaId: number): Promise<void> {
+  await run(
+    "UPDATE lomba SET status = 'selesai' WHERE id = ? AND status = 'aktif'",
+    lombaId
+  );
+}
