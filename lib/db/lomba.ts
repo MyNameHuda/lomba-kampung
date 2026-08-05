@@ -314,6 +314,18 @@ export async function tutupKualifikasiKategori(
   // usually fixes it (a fresh client.execute() will see the new column).
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
+      // Schema warmup: do a SELECT on the new column first to force the
+      // client to refresh its schema cache. If this fails, the column
+      // is not yet visible — the migration ALTER will be retried.
+      try {
+        await getClient().execute({
+          sql: "SELECT kualifikasi_tutup_at FROM lomba_kategori LIMIT 0",
+          args: [],
+        });
+      } catch {
+        // Schema race — re-run migration and continue
+        await ensureKualifikasiV4Columns();
+      }
       await getClient().execute({
         sql: "UPDATE lomba_kategori SET kualifikasi_tutup_at = ? WHERE lomba_id = ? AND kategori_id = ?",
         args: [Date.now(), lombaId, kategoriId],
@@ -322,7 +334,7 @@ export async function tutupKualifikasiKategori(
     } catch (e) {
       if (attempt === 2) throw e;
       // Schema race — wait a bit and retry
-      await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+      await new Promise((r) => setTimeout(r, 100 * (attempt + 1)));
     }
   }
   return true;
