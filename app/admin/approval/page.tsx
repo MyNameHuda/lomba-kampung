@@ -7,6 +7,7 @@ import {
   countPendaftarByStatus,
   countAllPendaftar,
 } from "@/lib/db";
+import type { KategoriSlim } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -56,9 +57,33 @@ export default async function ApprovalPage() {
     };
   });
 
+  // Slim shapes for the client-side filter chips. Only lomba that
+  // actually have at least 1 pending pendaftar are passed — keeps the
+  // chip row short and relevant.
+  const lombaByPending = new Map<string, number>();
+  for (const p of pending) lombaByPending.set(String(p.lombaId), (lombaByPending.get(String(p.lombaId)) ?? 0) + 1);
+  const filterLomba = allLomba
+    .filter((l) => lombaByPending.has(String(l.id)))
+    .map((l) => ({ id: l.id, nama: l.nama, emoji: l.emoji }));
+  // For kategori: any kategori that has at least 1 pending pendaftar.
+  const katByPending = new Map<string, number>();
+  for (const p of pending) katByPending.set(p.kategoriId, (katByPending.get(p.kategoriId) ?? 0) + 1);
+  const filterKategori: KategoriSlim[] = kats
+    .filter((k) => katByPending.has(k.id))
+    .map((k) => ({
+      id: k.id,
+      nama: k.nama,
+      icon: k.icon,
+      min: k.min,
+      max: k.max,
+      colorBg: k.colorBg,
+      colorText: k.colorText,
+      colorBorder: k.colorBorder,
+    }));
+
   return (
     <AdminShell title="Approval Pendaftar" breadcrumb="Approval" activeNav="/admin/approval">
-      <ApprovalClient initial={initial} stats={stats} />
+      <ApprovalClient initial={initial} stats={stats} lombaList={filterLomba} kategoriList={filterKategori} />
     </AdminShell>
   );
 }

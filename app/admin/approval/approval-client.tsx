@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useNotify } from "@/components/notify-provider";
 import { getInitials, timeAgo, dateFmt } from "@/lib/format";
 import KatTag from "@/components/kat-tag";
+import { KAT_ICON, DEFAULT_KAT_ICON } from "@/lib/constants";
+import type { KategoriSlim } from "@/lib/types";
 
 type Item = {
   id: number;
@@ -31,7 +33,19 @@ type Stats = {
   total: number;
 };
 
-export default function ApprovalClient({ initial, stats }: { initial: Item[]; stats: Stats }) {
+type LombaOption = { id: number; nama: string; emoji: string };
+
+export default function ApprovalClient({
+  initial,
+  stats,
+  lombaList,
+  kategoriList,
+}: {
+  initial: Item[];
+  stats: Stats;
+  lombaList: LombaOption[];
+  kategoriList: KategoriSlim[];
+}) {
   const router = useRouter();
   const notify = useNotify();
   const [items, setItems] = useState(initial);
@@ -40,6 +54,8 @@ export default function ApprovalClient({ initial, stats }: { initial: Item[]; st
   const [liveStats, setLiveStats] = useState(stats);
   const [busy, setBusy] = useState<number | null>(null);
   const [search, setSearch] = useState("");
+  const [filterLombaId, setFilterLombaId] = useState<number | null>(null);
+  const [filterKategoriId, setFilterKategoriId] = useState<string | null>(null);
 
   // Sync with server-rendered prop after router.refresh()
   useEffect(() => {
@@ -47,14 +63,38 @@ export default function ApprovalClient({ initial, stats }: { initial: Item[]; st
     setLiveStats(stats);
   }, [initial, stats]);
 
-  // Items list shows ONLY pending — server filters that for us.
-  // Status badges are hidden in the row (redundant — every row is pending).
-  // After approve/reject (single or bulk), the item is REMOVED from local state
-  // (no longer pending) so the list shrinks in real time without a full refresh.
-  const visible = search.trim()
-    ? items.filter((it) => it.nama.toLowerCase().includes(search.toLowerCase().trim()))
-    : items;
+  // Per-lomba / per-kategori pending counts for the chip badges.
+  // Recomputed on every items change so the numbers stay accurate as
+  // the user approves/rejects (without waiting for a server refresh).
+  const countByLomba = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const it of items) m.set(it.lombaId, (m.get(it.lombaId) ?? 0) + 1);
+    return m;
+  }, [items]);
+
+  const countByKategori = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const it of items) m.set(it.kategoriId, (m.get(it.kategoriId) ?? 0) + 1);
+    return m;
+  }, [items]);
+
+  // Combined filter: search (name) + lomba + kategori. All client-side.
+  // "Semua" chips clear the respective filter. Empty chips hide when
+  // the underlying filter has no matches.
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return items.filter((it) => {
+      if (q && !it.nama.toLowerCase().includes(q)) return false;
+      if (filterLombaId !== null && it.lombaId !== filterLombaId) return false;
+      if (filterKategoriId !== null && it.kategoriId !== filterKategoriId) return false;
+      return true;
+    });
+  }, [items, search, filterLombaId, filterKategoriId]);
+
   const pendingCount = items.length;
+  const visibleCount = visible.length;
+  const activeLomba = filterLombaId ? lombaList.find((l) => l.id === filterLombaId) : null;
+  const activeKategori = filterKategoriId ? kategoriList.find((k) => k.id === filterKategoriId) : null;
 
   async function setStatus(id: number, status: "disetujui" | "ditolak") {
     setBusy(id);
@@ -140,6 +180,107 @@ export default function ApprovalClient({ initial, stats }: { initial: Item[]; st
         </div>
       </div>
 
+      {/* Filter chips — client-side, no URL change (matches user pref) */}
+      {(lombaList.length > 0 || kategoriList.length > 0) && (
+        <div className="space-y-2 mb-3">
+          {/* Lomba chips */}
+          {lombaList.length > 0 && (
+            <div className="-mx-5 px-5 overflow-x-auto">
+              <div className="flex gap-1.5 min-w-max pb-0.5">
+                <button
+                  type="button"
+                  onClick={() => setFilterLombaId(null)}
+                  className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold border-2 transition-all ${
+                    filterLombaId === null
+                      ? "bg-primary border-primary text-white"
+                      : "bg-white border-[#E5E7EB] text-[#6B7280] hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  <i className="fas fa-trophy text-[10px]"></i> Semua ({pendingCount})
+                </button>
+                {lombaList.map((l) => {
+                  const isActive = filterLombaId === l.id;
+                  const count = countByLomba.get(l.id) ?? 0;
+                  if (count === 0 && !isActive) return null; // hide lomba with no pending
+                  return (
+                    <button
+                      key={l.id}
+                      type="button"
+                      onClick={() => setFilterLombaId(isActive ? null : l.id)}
+                      className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold border-2 transition-all ${
+                        isActive
+                          ? "bg-primary border-primary text-white"
+                          : "bg-white border-[#E5E7EB] text-[#6B7280] hover:border-primary hover:text-primary"
+                      }`}
+                    >
+                      <span className="text-sm leading-none">{l.emoji}</span> {l.nama} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {/* Kategori chips */}
+          {kategoriList.length > 0 && (
+            <div className="-mx-5 px-5 overflow-x-auto">
+              <div className="flex gap-1.5 min-w-max pb-0.5">
+                <button
+                  type="button"
+                  onClick={() => setFilterKategoriId(null)}
+                  className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold border-2 transition-all ${
+                    filterKategoriId === null
+                      ? "bg-primary border-primary text-white"
+                      : "bg-white border-[#E5E7EB] text-[#6B7280] hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  <i className="fas fa-tags text-[10px]"></i> Semua Kategori
+                </button>
+                {kategoriList.map((k) => {
+                  const isActive = filterKategoriId === k.id;
+                  const count = countByKategori.get(k.id) ?? 0;
+                  if (count === 0 && !isActive) return null;
+                  return (
+                    <button
+                      key={k.id}
+                      type="button"
+                      onClick={() => setFilterKategoriId(isActive ? null : k.id)}
+                      className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold border-2 transition-all"
+                      style={
+                        isActive
+                          ? {
+                              background: k.colorBg || "#E11D1D",
+                              borderColor: k.colorBorder || k.colorBg || "#E11D1D",
+                              color: k.colorText || "#FFFFFF",
+                            }
+                          : {
+                              background: "#FFFFFF",
+                              borderColor: k.colorBorder || "#E5E7EB",
+                              color: "#6B7280",
+                            }
+                      }
+                      onMouseEnter={(e) => {
+                        if (!isActive) {
+                          e.currentTarget.style.borderColor = k.colorBg || "#E11D1D";
+                          e.currentTarget.style.color = k.colorText || "#E11D1D";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isActive) {
+                          e.currentTarget.style.borderColor = k.colorBorder || "#E5E7EB";
+                          e.currentTarget.style.color = "#6B7280";
+                        }
+                      }}
+                    >
+                      <span>{KAT_ICON[k.icon || "fa-user"] || DEFAULT_KAT_ICON}</span> {k.nama} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="filter-bar">
         <div className="search flex-1 md:min-w-[200px] min-w-0 relative">
           <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF] text-sm"></i>
@@ -158,6 +299,42 @@ export default function ApprovalClient({ initial, stats }: { initial: Item[]; st
         >
           <i className="fas fa-check-double"></i> Approve Semua ({pendingCount})
         </button>
+      </div>
+
+      {/* Active filter summary */}
+      {(filterLombaId || filterKategoriId) && (
+        <div className="text-[11px] text-[#6B7280] mb-2 flex items-center gap-2 flex-wrap">
+          <span>Filter aktif:</span>
+          {activeLomba && (
+            <button
+              onClick={() => setFilterLombaId(null)}
+              className="inline-flex items-center gap-1 bg-primary-light text-primary px-2 py-0.5 rounded-full font-semibold"
+            >
+              {activeLomba.emoji} {activeLomba.nama} <i className="fas fa-xmark text-[9px]"></i>
+            </button>
+          )}
+          {activeKategori && (
+            <button
+              onClick={() => setFilterKategoriId(null)}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold"
+              style={{
+                background: activeKategori.colorBg || "#E11D1D",
+                color: activeKategori.colorText || "#FFFFFF",
+              }}
+            >
+              {KAT_ICON[activeKategori.icon || "fa-user"] || DEFAULT_KAT_ICON} {activeKategori.nama} <i className="fas fa-xmark text-[9px]"></i>
+            </button>
+          )}
+          <button
+            onClick={() => { setFilterLombaId(null); setFilterKategoriId(null); }}
+            className="text-[#9D1010] font-semibold hover:underline"
+          >
+            Reset semua
+          </button>
+        </div>
+      )}
+      <div className="text-[11px] text-[#6B7280] mb-2">
+        {visibleCount} dari {pendingCount} pendaftar ditampilkan
       </div>
 
       <div className="card overflow-hidden">
@@ -242,13 +419,17 @@ export default function ApprovalClient({ initial, stats }: { initial: Item[]; st
             {visible.length === 0 && (
               <tr>
                 <td colSpan={6} className="text-center py-14 px-6 text-[#6B7280] empty-state-cell">
-                  {search.trim() ? (
-                    <div className="flex flex-col items-center gap-2 leading-relaxed max-w-[360px] mx-auto">
-                      <i className="fas fa-search text-3xl text-[#D1D5DB] mb-1"></i>
-                      <span>
-                        Tidak ada pendaftar dengan nama "<strong className="text-[#1F2937]">{search}</strong>"
-                        {" "}yang menunggu approval.
-                      </span>
+                  {search.trim() || filterLombaId || filterKategoriId ? (
+                    <div className="flex flex-col items-center gap-2.5 leading-relaxed max-w-[360px] mx-auto">
+                      <i className="fas fa-filter text-4xl text-[#D1D5DB] mb-1"></i>
+                      <strong className="block text-[#1F2937] text-base">Tidak ada hasil</strong>
+                      <span className="text-sm">Coba reset filter atau ganti kata kunci pencarian.</span>
+                      <button
+                        onClick={() => { setSearch(""); setFilterLombaId(null); setFilterKategoriId(null); }}
+                        className="inline-block mt-3 px-5 py-2.5 bg-primary-light text-primary rounded-lg font-semibold text-sm hover:bg-[#FBE0E0] transition-all whitespace-nowrap"
+                      >
+                        Reset semua filter
+                      </button>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center gap-2.5 leading-relaxed max-w-[360px] mx-auto">
