@@ -33,9 +33,26 @@ export async function ensureKualifikasiColumns(): Promise<void> {
 // - lomba_kategori.kualifikasi_tutup_at: timestamp when admin Tutup Kualifikasi
 //   for this (lomba, kategori). NULL = kualifikasi ongoing for this kategori.
 //   Per-kategori (independen) — different kategori can be in different phases.
+//
+// Implementation note: per-column try/catch because batch() is atomic and
+// SQLite ALTER errors would abort the whole batch. The previous PRAGMA +
+// ALTER approach had a race where PRAGMA saw the column but a subsequent
+// SELECT in the same request failed — likely due to libSQL HTTP using
+// separate statement connections.
 export async function ensureKualifikasiV4Columns(): Promise<void> {
-  await ensureColumn("pendaftar", "is_finalist", "INTEGER");
-  await ensureColumn("lomba_kategori", "kualifikasi_tutup_at", "INTEGER");
+  await runOrIgnore("ALTER TABLE pendaftar ADD COLUMN is_finalist INTEGER");
+  await runOrIgnore("ALTER TABLE lomba_kategori ADD COLUMN kualifikasi_tutup_at INTEGER");
+}
+
+async function runOrIgnore(sql: string): Promise<void> {
+  try {
+    await getClient().execute({ sql, args: [] });
+  } catch (e) {
+    const msg = String(e);
+    if (!msg.includes("duplicate column") && !msg.includes("already exists")) {
+      throw e;
+    }
+  }
 }
 
 // Self-healing: ensure lomba_kategori supports multiple PJs per (lomba, kategori).

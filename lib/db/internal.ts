@@ -36,14 +36,6 @@ export const toCamelAll = <T>(rows: DbRow[]): T[] => rows.map((r) => toCamel<T>(
 import { run } from "./client";
 export async function ensureColumn(table: string, column: string, definition: string): Promise<void> {
   const cols = await all<{ name: string }>(`PRAGMA table_info(${table})`);
-  if (cols.some((c) => c.name === column)) {
-    console.log(`[migrate] ${table}.${column} already exists, skipping`);
-    return;
-  }
-  console.log(`[migrate] ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  if (cols.some((c) => c.name === column)) return;
   await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-  console.log(`[migrate] ${table}.${column} added`);
-  // Verify
-  const after = await all<{ name: string }>(`PRAGMA table_info(${table})`);
-  console.log(`[migrate] after ALTER, ${table} has columns: ${after.map(c => c.name).join(', ')}`);
 }
