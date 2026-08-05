@@ -26,18 +26,29 @@ async function loadPjBulk(): Promise<Map<number, Record<string, Pj[]>>> {
 
 // Load per-kategori kualifikasi Tutup state for many lomba at once (avoid N+1).
 // Returns Map<lombaId, Record<kategoriId, tutupAt | null>>. null = not yet Tutup.
+// Defensive: if the column doesn't exist or the SELECT fails (libSQL HTTP race
+// after ALTER), return an empty Map. This way the rest of the system keeps
+// working — v4 per-kategori Tutup will just appear as "not Tutup" until the
+// migration is reliably applied.
 async function loadKategoriTutupBulk(): Promise<Map<number, Record<string, number | null>>> {
   await ensureKualifikasiV4Columns();
-  const rows = await all<{ lomba_id: number; kategori_id: string; kualifikasi_tutup_at: number | null }>(
-    "SELECT lomba_id, kategori_id, kualifikasi_tutup_at FROM lomba_kategori"
-  );
-  const map = new Map<number, Record<string, number | null>>();
-  for (const r of rows) {
-    let m = map.get(r.lomba_id);
-    if (!m) { m = {}; map.set(r.lomba_id, m); }
-    m[r.kategori_id] = r.kualifikasi_tutup_at ?? null;
+  try {
+    const rows = await all<{ lomba_id: number; kategori_id: string; kualifikasi_tutup_at: number | null }>(
+      "SELECT lomba_id, kategori_id, kualifikasi_tutup_at FROM lomba_kategori"
+    );
+    const map = new Map<number, Record<string, number | null>>();
+    for (const r of rows) {
+      let m = map.get(r.lomba_id);
+      if (!m) { m = {}; map.set(r.lomba_id, m); }
+      m[r.kategori_id] = r.kualifikasi_tutup_at ?? null;
+    }
+    return map;
+  } catch {
+    // Column not yet visible to this connection (libSQL HTTP race).
+    // Return empty Map — v4 per-kategori Tutup state will be "not Tutup" everywhere.
+    // The v4 flow will partially break but the rest of the system stays alive.
+    return new Map();
   }
-  return map;
 }
 
 function attachPj<T extends { id: number }>(row: T, pjBulk: Map<number, Record<string, Pj[]>>): T & { pjByKategori: Record<string, Pj[]> } {

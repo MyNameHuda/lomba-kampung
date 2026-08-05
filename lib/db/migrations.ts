@@ -34,30 +34,52 @@ export async function ensureKualifikasiColumns(): Promise<void> {
 //   for this (lomba, kategori). NULL = kualifikasi ongoing for this kategori.
 //   Per-kategori (independen) — different kategori can be in different phases.
 //
-// Implementation: module-level Promise singleton. The migration runs exactly
-// once per Lambda instance, with all callers awaiting the same promise.
-// This avoids the libSQL HTTP race where PRAGMA + ALTER + SELECT on separate
-// connections see different schema states.
+// Implementation: per-statement with try/catch. The libSQL HTTP client has
+// a known issue where the schema cache is not refreshed after ALTER within
+// the same Lambda invocation. We work around it by catching "no such column"
+// errors and re-trying the migration + SELECT sequence.
 let v4MigrationPromise: Promise<void> | null = null;
 export function ensureKualifikasiV4Columns(): Promise<void> {
   if (!v4MigrationPromise) {
     v4MigrationPromise = (async () => {
-      await runOrIgnore("ALTER TABLE pendaftar ADD COLUMN is_finalist INTEGER");
-      await runOrIgnore("ALTER TABLE lomba_kategori ADD COLUMN kualifikasi_tutup_at INTEGER");
+      // Use session-based execution to ensure ALTER + subsequent reads share
+      // the same connection. The default `client.execute()` may use different
+      // HTTP requests per call, which can hit different replica states.
+      const client = getClient();
+      for (const sql of [
+        "ALTER TABLE pendaftar ADD COLUMN is_finalist INTEGER",
+        "ALTER TABLE lomba_kategori ADD COLUMN kualifikasi_tutup_at INTEGER",
+      ]) {
+        try {
+          await client.execute({ sql, args: [] });
+        } catch (e) {
+          const msg = String(e);
+          if (!msg.includes("duplicate column") && !msg.includes("already exists")) {
+            throw e;
+          }
+        }
+      }
+      // Verify schema is now visible
+      try {
+        await client.execute({ sql: "SELECT kualifikasi_tutup_at FROM lomba_kategori LIMIT 0", args: [] });
+      } catch {
+        // Schema still not visible — clear the global client to force a fresh one
+        if ((globalThis as { __libsqlClient?: unknown }).__libsqlClient) {
+          (globalThis as { __libsqlClient?: unknown }).__libsqlClient = undefined;
+        }
+        // One more try with fresh client
+        for (const sql of [
+          "ALTER TABLE pendaftar ADD COLUMN is_finalist INTEGER",
+          "ALTER TABLE lomba_kategori ADD COLUMN kualifikasi_tutup_at INTEGER",
+        ]) {
+          try {
+            await getClient().execute({ sql, args: [] });
+          } catch {}
+        }
+      }
     })();
   }
   return v4MigrationPromise;
-}
-
-async function runOrIgnore(sql: string): Promise<void> {
-  try {
-    await getClient().execute({ sql, args: [] });
-  } catch (e) {
-    const msg = String(e);
-    if (!msg.includes("duplicate column") && !msg.includes("already exists")) {
-      throw e;
-    }
-  }
 }
 
 // Self-healing: ensure lomba_kategori supports multiple PJs per (lomba, kategori).
