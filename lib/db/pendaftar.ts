@@ -4,7 +4,7 @@
 import { all, get, run, type DbRow, type DbValue } from "./client";
 import { toCamel, toCamelAll } from "./internal";
 import { getKategori } from "./kategori";
-import { ensureJuaraColumn } from "./migrations";
+import { ensureJuaraColumn, ensureKualifikasiV4Columns } from "./migrations";
 import type { DisplaySection, DisplaySectionKey, JenisKelamin, Pendaftar, PendaftarStatus } from "./types";
 
 // =================== Read ===================
@@ -32,11 +32,12 @@ export async function getPendaftarById(id: number): Promise<Pendaftar | null> {
 
 // =================== Write ===================
 export async function createPendaftar(
-  data: Omit<Pendaftar, "id" | "nomor" | "createdAt" | "updatedAt" | "status" | "alasanTolak" | "hadir" | "juaraRank"> & {
+  data: Omit<Pendaftar, "id" | "nomor" | "createdAt" | "updatedAt" | "status" | "alasanTolak" | "hadir" | "juaraRank" | "isFinalist"> & {
     status?: PendaftarStatus;
     alasanTolak?: string | null;
     hadir?: boolean;
     juaraRank?: 1 | 2 | 3 | null;
+    isFinalist?: 0 | 1 | null;
   }
 ): Promise<{ id: number; nomor: string }> {
   const year = new Date().getFullYear();
@@ -86,6 +87,7 @@ export async function updatePendaftar(id: number, updates: Partial<Pendaftar>): 
     sumber: "sumber",
     hadir: "hadir",
     juaraRank: "juara_rank",
+    isFinalist: "is_finalist",
     createdAt: "created_at",
     updatedAt: "updated_at",
   };
@@ -391,4 +393,103 @@ export async function countJuaraByKategori(
     }
   }
   return out;
+}
+
+// =================== Finalist (stage system v4) ===================
+// Finalists (pendaftar who passed kualifikasi) are tracked via is_finalist
+// (tri-state: null=pending, 1=lolos, 0=gugur). Separate from juara_rank
+// which is for Juara 1/2/3 only (set in final phase).
+//
+// Gugur is REVERSIBLE — admin can un-gugur (back to null) or un-loloskan
+// (back to null) anytime during kualifikasi. Once kategori Tutup, finalist
+// state is locked and only Juara rank can be set/cleared.
+
+/**
+ * Set finalist state for a pendaftar. Used during kualifikasi phase
+ * (before kategori Tutup). Caller must validate pendaftar exists, belongs
+ * to the right lomba, and the kategori is not yet Tutup.
+ *
+ * @param status 1 = lolos, 0 = gugur, null = reset to pending
+ */
+export async function setFinalist(
+  pendaftarId: number,
+  status: 0 | 1 | null
+): Promise<void> {
+  await ensureKualifikasiV4Columns();
+  await run("UPDATE pendaftar SET is_finalist = ? WHERE id = ?", status, pendaftarId);
+}
+
+/**
+ * Per-kategori kualifikasi status summary. Used by admin UI tabs and
+ * Tutup Kualifikasi readiness check.
+ *
+ * Returns:
+ *   - lolos: count of pendaftar with is_finalist = 1
+ *   - gugur: count of pendaftar with is_finalist = 0
+ *   - pending: count of pendaftar with is_finalist IS NULL
+ *   - total: pendaftar count (status='disetujui')
+ *   - readyToTutup: true iff pending === 0 (all decided)
+ */
+export type KualifikasiKategoriStatus = {
+  lolos: number;
+  gugur: number;
+  pending: number;
+  total: number;
+  readyToTutup: boolean;
+};
+
+export async function getKualifikasiStatusByKategori(
+  lombaId: number,
+  kategoriId: string
+): Promise<KualifikasiKategoriStatus> {
+  await ensureKualifikasiV4Columns();
+  const rows = await all<{ c: number; s: number | null }>(
+    `SELECT is_finalist as s, COUNT(*) as c
+     FROM pendaftar
+     WHERE lomba_id = ? AND kategori_id = ? AND status = 'disetujui'
+     GROUP BY is_finalist`,
+    lombaId,
+    kategoriId
+  );
+  let lolos = 0, gugur = 0, pending = 0;
+  for (const r of rows) {
+    if (r.s === 1) lolos = Number(r.c);
+    else if (r.s === 0) gugur = Number(r.c);
+    else pending = Number(r.c);
+  }
+  const total = lolos + gugur + pending;
+  return { lolos, gugur, pending, total, readyToTutup: pending === 0 };
+}
+
+/**
+ * Finalist readiness per eligible kategori for a lomba. Used to compute
+ * the global "Tutup Kualifikasi" badge + button state.
+ *
+ *   - perKategori: keyed by kategoriId
+ *   - allReady: every eligible kategori with >=1 pendaftar has readyToTutup
+ *   - anyInKualifikasi: at least one kategori still has pending decisions
+ *   - allInFinal: every eligible kategori is Tutup (kualifikasi_tutup_at set)
+ */
+export async function getLombaKualifikasiStatus(
+  lombaId: number,
+  eligibleKategoriIds: string[],
+  kategoriTutupAt: Record<string, number | null>
+): Promise<{
+  perKategori: Record<string, KualifikasiKategoriStatus>;
+  allReady: boolean;
+  anyInKualifikasi: boolean;
+  allInFinal: boolean;
+}> {
+  await ensureKualifikasiV4Columns();
+  const perKategori: Record<string, KualifikasiKategoriStatus> = {};
+  for (const kid of eligibleKategoriIds) {
+    perKategori[kid] = await getKualifikasiStatusByKategori(lombaId, kid);
+  }
+  // allReady = every eligible kategori with pendaftar has no pending
+  const allReady = eligibleKategoriIds.every((kid) => perKategori[kid].readyToTutup);
+  // anyInKualifikasi = at least one eligible kategori has pending
+  const anyInKualifikasi = eligibleKategoriIds.some((kid) => perKategori[kid].pending > 0);
+  // allInFinal = every eligible kategori has kualifikasi_tutup_at set
+  const allInFinal = eligibleKategoriIds.every((kid) => !!kategoriTutupAt[kid]);
+  return { perKategori, allReady, anyInKualifikasi, allInFinal };
 }

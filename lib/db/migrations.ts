@@ -18,12 +18,24 @@ export async function ensureJuaraColumn(): Promise<void> {
 }
 
 // Self-healing: ensure lomba has kualifikasi phase columns (v3 stage system).
-// - finalis_count: how many finalists per kategori (default 5, range 1-50)
+// - finalis_count: how many finalists per kategori (default 5, range 1-50) — DEPRECATED in v4
 // - phase: 'kualifikasi' | 'final' | NULL
 //   NULL = lomba belum mulai kualifikasi (default for new lomba, also legacy v2 mode)
 export async function ensureKualifikasiColumns(): Promise<void> {
   await ensureColumn("lomba", "finalis_count", "INTEGER NOT NULL DEFAULT 5");
   await ensureColumn("lomba", "phase", "TEXT");
+}
+
+// Self-healing: ensure kualifikasi v4 columns (finalist split from juara_rank).
+// - pendaftar.is_finalist: tri-state (NULL=pending, 1=lolos, 0=gugur)
+//   Replaces v3's reuse of juara_rank for kualifikasi slot. v4 keeps juara_rank
+//   for Juara 1/2/3 only (final phase).
+// - lomba_kategori.kualifikasi_tutup_at: timestamp when admin Tutup Kualifikasi
+//   for this (lomba, kategori). NULL = kualifikasi ongoing for this kategori.
+//   Per-kategori (independen) — different kategori can be in different phases.
+export async function ensureKualifikasiV4Columns(): Promise<void> {
+  await ensureColumn("pendaftar", "is_finalist", "INTEGER");
+  await ensureColumn("lomba_kategori", "kualifikasi_tutup_at", "INTEGER");
 }
 
 // Self-healing: ensure lomba_kategori supports multiple PJs per (lomba, kategori).

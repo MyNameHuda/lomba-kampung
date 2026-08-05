@@ -3,7 +3,7 @@
 // enabled via the (lomba_id, kategori_id, urutan) composite PK — see migrations.ts).
 import { all, get, run, type DbRow } from "./client";
 import { toCamel, toCamelAll } from "./internal";
-import { ensurePjMultiSupport, ensureKualifikasiColumns } from "./migrations";
+import { ensurePjMultiSupport, ensureKualifikasiColumns, ensureKualifikasiV4Columns } from "./migrations";
 import type { Lomba, LombaKategoriInput, Pj } from "./types";
 
 // Load pjByKategori for many lomba at once (avoid N+1).
@@ -24,8 +24,31 @@ async function loadPjBulk(): Promise<Map<number, Record<string, Pj[]>>> {
   return map;
 }
 
+// Load per-kategori kualifikasi Tutup state for many lomba at once (avoid N+1).
+// Returns Map<lombaId, Record<kategoriId, tutupAt | null>>. null = not yet Tutup.
+async function loadKategoriTutupBulk(): Promise<Map<number, Record<string, number | null>>> {
+  await ensureKualifikasiV4Columns();
+  const rows = await all<{ lomba_id: number; kategori_id: string; kualifikasi_tutup_at: number | null }>(
+    "SELECT lomba_id, kategori_id, kualifikasi_tutup_at FROM lomba_kategori"
+  );
+  const map = new Map<number, Record<string, number | null>>();
+  for (const r of rows) {
+    let m = map.get(r.lomba_id);
+    if (!m) { m = {}; map.set(r.lomba_id, m); }
+    m[r.kategori_id] = r.kualifikasi_tutup_at ?? null;
+  }
+  return map;
+}
+
 function attachPj<T extends { id: number }>(row: T, pjBulk: Map<number, Record<string, Pj[]>>): T & { pjByKategori: Record<string, Pj[]> } {
   return { ...row, pjByKategori: pjBulk.get(row.id) || {} };
+}
+
+function attachKategoriTutup<T extends { id: number }>(
+  row: T,
+  tutupBulk: Map<number, Record<string, number | null>>
+): T & { kategoriTutupAt: Record<string, number | null> } {
+  return { ...row, kategoriTutupAt: tutupBulk.get(row.id) || {} };
 }
 
 // =================== Read ===================
@@ -35,16 +58,16 @@ export async function getLomba(includeInactive = false): Promise<Lomba[]> {
     ? "SELECT * FROM lomba ORDER BY urutan"
     : "SELECT * FROM lomba WHERE status = 'aktif' ORDER BY urutan";
   const rows = toCamelAll<Lomba>(await all<DbRow>(sql));
-  const pjBulk = await loadPjBulk();
-  return rows.map((r) => attachPj(r, pjBulk));
+  const [pjBulk, tutupBulk] = await Promise.all([loadPjBulk(), loadKategoriTutupBulk()]);
+  return rows.map((r) => attachKategoriTutup(attachPj(r, pjBulk), tutupBulk));
 }
 
 export async function getLombaById(id: number): Promise<Lomba | null> {
   await ensureKualifikasiColumns();
   const row = toCamel<Lomba>(await get<DbRow>("SELECT * FROM lomba WHERE id = ?", id));
   if (!row) return null;
-  const pjBulk = await loadPjBulk();
-  return attachPj(row, pjBulk);
+  const [pjBulk, tutupBulk] = await Promise.all([loadPjBulk(), loadKategoriTutupBulk()]);
+  return attachKategoriTutup(attachPj(row, pjBulk), tutupBulk);
 }
 
 export async function getLombaWithCount(): Promise<{ id: number; nama: string; emoji: string; count: number; pjByKategori: Record<string, Pj[]> }[]> {
@@ -67,7 +90,9 @@ export async function getLombaWithCount(): Promise<{ id: number; nama: string; e
 }
 
 // =================== Write ===================
-export async function createLomba(data: Omit<Lomba, "id" | "createdAt" | "pjByKategori">): Promise<number> {
+// Input excludes DB-managed fields (id, createdAt, pjByKategori, kategoriTutupAt
+// — the latter is auto-derived via loadKategoriTutupBulk on read).
+export async function createLomba(data: Omit<Lomba, "id" | "createdAt" | "pjByKategori" | "kategoriTutupAt">): Promise<number> {
   await ensureKualifikasiColumns();
   const result = await run(
     `INSERT INTO lomba (nama, emoji, deskripsi, syarat, kategori_eligible, status, urutan, finalis_count, phase)
@@ -107,7 +132,7 @@ export async function setLombaKategori(lombaId: number, list: LombaKategoriInput
   }
 }
 
-export async function updateLomba(id: number, updates: Partial<Omit<Lomba, "id" | "createdAt" | "pjByKategori">>): Promise<void> {
+export async function updateLomba(id: number, updates: Partial<Omit<Lomba, "id" | "createdAt" | "pjByKategori" | "kategoriTutupAt">>): Promise<void> {
   const map: Record<string, string> = {
     nama: "nama",
     emoji: "emoji",
@@ -241,4 +266,70 @@ export async function getKualifikasiReadiness(lombaId: number): Promise<{
     missingKategori,
     perKategori,
   };
+}
+
+// =================== Per-kategori Tutup Kualifikasi (stage system v4) ===================
+// v4: each kategori can be Tutup'd independently. When Tutup:
+//   - All is_finalist decisions are locked (admin can no longer Loloskan/Gugur)
+//   - Admin now picks Juara 1/2/3 from finalists (is_finalist = 1)
+//
+// This is a per-(lomba, kategori) action — different kategori can be in
+// different phases. Tutup is reversible (admin can "Buka Kualifikasi" to
+// unlock and edit finalist decisions, as long as Juara 1/2/3 not yet picked).
+
+/**
+ * Mark a (lomba, kategori) as Tutup. All pendaftar must be decided
+ * (is_finalist IS NOT NULL) before this succeeds.
+ *
+ * Returns true on success, false if any pendaftar is still pending.
+ */
+export async function tutupKualifikasiKategori(
+  lombaId: number,
+  kategoriId: string
+): Promise<boolean> {
+  await ensureKualifikasiV4Columns();
+  // Verify all pendaftar decided
+  const pendingRow = await get<{ c: number }>(
+    `SELECT COUNT(*) as c FROM pendaftar
+     WHERE lomba_id = ? AND kategori_id = ? AND status = 'disetujui'
+       AND is_finalist IS NULL`,
+    lombaId,
+    kategoriId
+  );
+  if ((pendingRow?.c ?? 0) > 0) return false;
+  await run(
+    `UPDATE lomba_kategori SET kualifikasi_tutup_at = ?
+     WHERE lomba_id = ? AND kategori_id = ?`,
+    Date.now(),
+    lombaId,
+    kategoriId
+  );
+  return true;
+}
+
+/**
+ * Re-open Tutup — admin can edit is_finalist again. Only allowed if no
+ * Juara 1/2/3 has been picked yet (otherwise we'd silently clear them).
+ * Returns true on success, false if Juara already picked.
+ */
+export async function bukaKualifikasiKategori(
+  lombaId: number,
+  kategoriId: string
+): Promise<boolean> {
+  await ensureKualifikasiV4Columns();
+  // Verify no Juara picked yet
+  const juaraRow = await get<{ c: number }>(
+    `SELECT COUNT(*) as c FROM pendaftar
+     WHERE lomba_id = ? AND kategori_id = ? AND juara_rank IS NOT NULL`,
+    lombaId,
+    kategoriId
+  );
+  if ((juaraRow?.c ?? 0) > 0) return false;
+  await run(
+    `UPDATE lomba_kategori SET kualifikasi_tutup_at = NULL
+     WHERE lomba_id = ? AND kategori_id = ?`,
+    lombaId,
+    kategoriId
+  );
+  return true;
 }

@@ -22,7 +22,7 @@ export type {
 } from "./types";
 
 // Migrations (idempotent — safe to call repeatedly)
-export { ensureKategoriColorColumns, ensurePjMultiSupport, ensureJuaraColumn, ensureKualifikasiColumns } from "./migrations";
+export { ensureKategoriColorColumns, ensurePjMultiSupport, ensureJuaraColumn, ensureKualifikasiColumns, ensureKualifikasiV4Columns } from "./migrations";
 
 // Settings
 export { getSettings, updateSettings, updateAdminPassword } from "./settings";
@@ -43,6 +43,8 @@ export {
   markLombaSelesai,
   setLombaPhase,
   getKualifikasiReadiness,
+  tutupKualifikasiKategori,
+  bukaKualifikasiKategori,
   type JuaraReadiness,
 } from "./lomba";
 
@@ -66,7 +68,11 @@ export {
   clearJuaraRank,
   getJuaraByLomba,
   countJuaraByKategori,
+  setFinalist,
+  getKualifikasiStatusByKategori,
+  getLombaKualifikasiStatus,
   type JuaraSlim,
+  type KualifikasiKategoriStatus,
 } from "./pendaftar";
 
 // Backup / reset
