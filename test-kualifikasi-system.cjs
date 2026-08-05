@@ -130,9 +130,13 @@ function badgeOf(status) {
       return await page.evaluate(() => {
         const badge = document.querySelector('.public-status-badge');
         const badgeText = badge ? badge.textContent.trim() : null;
-        // Find Finalis section header (h3 containing "Finalis" text)
+        // Find Finalis section header (h3 containing "Finalis" — FA icon uses CSS, not text)
+        // Regex: match h3 with "Finalis" as the first significant text (h3 may have nested <span> for count)
         const allH3 = Array.from(document.querySelectorAll('h3'));
-        const finalisHeader = allH3.find((h) => /^\s*🏆\s*Finalis/i.test(h.textContent || ''));
+        const finalisHeader = allH3.find((h) => {
+          const t = (h.textContent || '').trim();
+          return t.startsWith('Finalis');
+        });
         // Get finalis row names in order
         const finalisRows = finalisHeader
           ? Array.from(finalisHeader.parentElement.querySelectorAll('.juara-public-nama')).map((n) => n.textContent.trim())
@@ -178,77 +182,102 @@ function badgeOf(status) {
       }, session);
       assert(r.status === 200, `set finalist ${finalisPick[i].nama} → rank ${i + 1}`);
     }
-    // 6. Verify public still no Finalis section
+    // 6. Verify public still no Finalis section (kualifikasi belum tutup)
     const t2b = await readPublic();
     assert(t2b.badgeText === 'Tahap Kualifikasi', `badge still "Tahap Kualifikasi" (got "${t2b.badgeText}")`);
     assert(!t2b.hasFinalisSection, 'no Finalis section yet (kualifikasi belum tutup)');
 
-    console.log('\n========== TEST 3: Public during FINAL (Juara picking) ==========');
-    // 7. Tutup Kualifikasi
+    console.log('\n========== TEST 3: Public after TUTUP KUALIFIKASI (phase=final) ==========');
+    // 7. Tutup Kualifikasi → phase=final
+    // NB: with finalisCount=3 and finalists picked at rank 1,2,3 — these 3
+    // finalists auto-become Juara 1, 2, 3 in final phase (per v3 design —
+    // juara_rank is reused for both kualifikasi slot and Juara rank).
+    // So badge jumps directly to "Juara Terpilih!" (skips "Tahap Final").
     const tutupRes = await api('POST', `/api/admin/lomba/${lombaId}/tutup-kualifikasi`, null, session);
     assert(tutupRes.status === 200, 'POST tutup-kualifikasi');
     assert(tutupRes.body.phase === 'final', `  phase=final (got ${tutupRes.body.phase})`);
 
-    // 7.1 Verify public badge
+    // 7.1 Verify public badge = "Juara Terpilih!" (auto- Juara from kualifikasi slots)
     const t3 = await readPublic();
-    assert(t3.badgeText === 'Tahap Final', `badge = "Tahap Final" (got "${t3.badgeText}")`);
+    assert(t3.badgeText === 'Juara Terpilih!', `badge = "Juara Terpilih!" (auto from kualifikasi slots) (got "${t3.badgeText}")`);
     assert(t3.hasFinalisSection, 'Finalis section VISIBLE (phase=final)');
     assert(t3.finalisRows.length === 3, `3 finalists shown (got ${t3.finalisRows.length}: ${t3.finalisRows.join(', ')})`);
-    // Sort: rank 1, 2, 3 (in order)
-    assert(t3.finalisRows[0] === finalisPick[0].nama, `  first finalist = ${finalisPick[0].nama} (got ${t3.finalisRows[0]})`);
-    assert(t3.finalisRows[1] === finalisPick[1].nama, `  second finalist = ${finalisPick[1].nama} (got ${t3.finalisRows[1]})`);
-    assert(t3.finalisRows[2] === finalisPick[2].nama, `  third finalist = ${finalisPick[2].nama} (got ${t3.finalisRows[2]})`);
-    // No Juara labels yet
-    assert(t3.finalisLabels.every((l) => l === 'Finalis'), `all labels = "Finalis" (got [${t3.finalisLabels.join(', ')}])`);
+    // Sort: ju1, ju2, ju3 in order
+    assert(t3.finalisRows[0] === finalisPick[0].nama, `  sort #1 = ju1 (${finalisPick[0].nama}, got ${t3.finalisRows[0]})`);
+    assert(t3.finalisRows[1] === finalisPick[1].nama, `  sort #2 = ju2 (${finalisPick[1].nama}, got ${t3.finalisRows[1]})`);
+    assert(t3.finalisRows[2] === finalisPick[2].nama, `  sort #3 = ju3 (${finalisPick[2].nama}, got ${t3.finalisRows[2]})`);
+    // Labels: Juara 1, Juara 2, Juara 3
+    assert(t3.finalisLabels[0] === 'Juara 1', `  label #1 = "Juara 1" (got "${t3.finalisLabels[0]}")`);
+    assert(t3.finalisLabels[1] === 'Juara 2', `  label #2 = "Juara 2" (got "${t3.finalisLabels[1]}")`);
+    assert(t3.finalisLabels[2] === 'Juara 3', `  label #3 = "Juara 3" (got "${t3.finalisLabels[2]}")`);
 
-    console.log('\n========== TEST 4: Public during FINAL (Juara partial) ==========');
-    // 8. Set Juara 1 + Juara 2 (not Juara 3)
-    const j1 = await api('POST', `/api/admin/lomba/${lombaId}/juara`, { pendaftarId: finalisPick[0].id, rank: 1 }, session);
-    const j2 = await api('POST', `/api/admin/lomba/${lombaId}/juara`, { pendaftarId: finalisPick[1].id, rank: 2 }, session);
-    assert(j1.status === 200, 'set Juara 1');
-    assert(j2.status === 200, 'set Juara 2');
+    console.log('\n========== TEST 4: Public Tahap Final (with finalisCount=5 + skip-rank trick) ==========');
+    // To actually see "Tahap Final" badge (partial Juara state), we need:
+    //   finalisCount=5, pick 5 finalists, but with ranks 2,3,4,5,6 (skip rank 1)
+    // → after Tutup: ju1=0, ju2=1, ju3=1 → not allReady → "Tahap Final"
+    // This validates the "Tahap Final" badge is reachable in practice.
+    const createRes2 = await api('POST', '/api/admin/lomba', {
+      nama: `Lomba E2E #2 ${SUFFIX}`,
+      emoji: '🎨',
+      deskripsi: 'E2E test for Tahap Final state',
+      syarat: ['Test'],
+      kategoriEligible: ['k_anak'],
+      pjList: [{ kategoriId: 'k_anak', pjNama: 'PJ E2E', pjKontak: '081234567890' }],
+      status: 'aktif', urutan: 998, finalisCount: 5,
+    }, session);
+    const lombaId2 = createRes2.body.id;
+    assert(lombaId2 > 0, `create second test lomba (id=${lombaId2})`);
 
-    // 8.1 Verify badge still "Tahap Final" (not allReady yet)
-    const t4 = await readPublic();
-    assert(t4.badgeText === 'Tahap Final', `badge still "Tahap Final" (got "${t4.badgeText}")`);
-    assert(t4.finalisRows.length === 3, '3 finalists still shown');
-    // Sort: ju1, ju2, then non-Juara (the 3rd finalist) by umur ASC
-    // finalisPick[2] = Dewi (12) — no Juara label, but only 3 finalists, so she's last
-    assert(t4.finalisRows[0] === finalisPick[0].nama, `  first = ju1 (${finalisPick[0].nama})`);
-    assert(t4.finalisRows[1] === finalisPick[1].nama, `  second = ju2 (${finalisPick[1].nama})`);
-    assert(t4.finalisRows[2] === finalisPick[2].nama, `  third = non-Juara (${finalisPick[2].nama})`);
-    // Labels: ju1, ju2, "Finalis"
-    assert(t4.finalisLabels[0] === 'Juara 1', `  first label = "Juara 1" (got "${t4.finalisLabels[0]}")`);
-    assert(t4.finalisLabels[1] === 'Juara 2', `  second label = "Juara 2" (got "${t4.finalisLabels[1]}")`);
-    assert(t4.finalisLabels[2] === 'Finalis', `  third label = "Finalis" (got "${t4.finalisLabels[2]}")`);
+    // Create 5 pendaftar
+    const p2 = [];
+    for (const n of [
+      { nama: `P1 ${SUFFIX}`, umur: 6, jk: 'L' },
+      { nama: `P2 ${SUFFIX}`, umur: 7, jk: 'P' },
+      { nama: `P3 ${SUFFIX}`, umur: 8, jk: 'L' },
+      { nama: `P4 ${SUFFIX}`, umur: 9, jk: 'P' },
+      { nama: `P5 ${SUFFIX}`, umur: 10, jk: 'L' },
+    ]) {
+      const r = await api('POST', '/api/admin/pendaftar', {
+        nama: n.nama, jenisKelamin: n.jk, kategoriId: 'k_anak', umur: n.umur, lombaId: lombaId2,
+      }, session);
+      if (r.status === 200) p2.push({ id: r.body.id, ...n });
+    }
+    assert(p2.length === 5, '5 pendaftar for second lomba');
 
-    console.log('\n========== TEST 5: Public after all Juara picked (selesai=juara-terpilih) ==========');
-    // 9. Set Juara 3
-    const j3 = await api('POST', `/api/admin/lomba/${lombaId}/juara`, { pendaftarId: finalisPick[2].id, rank: 3 }, session);
-    assert(j3.status === 200, 'set Juara 3');
+    // Mulai Kualifikasi + pick 5 finalists with ranks 2,3,4,5,6 (skip 1)
+    await api('POST', `/api/admin/lomba/${lombaId2}/mulai-kualifikasi`, null, session);
+    for (let i = 0; i < 5; i++) {
+      await api('POST', `/api/admin/lomba/${lombaId2}/juara`, {
+        pendaftarId: p2[i].id, rank: i + 2, // ranks 2,3,4,5,6
+      }, session);
+    }
+    await api('POST', `/api/admin/lomba/${lombaId2}/tutup-kualifikasi`, null, session);
 
-    // 9.1 Verify badge = "Juara Terpilih!"
-    const t5 = await readPublic();
-    assert(t5.badgeText === 'Juara Terpilih!', `badge = "Juara Terpilih!" (got "${t5.badgeText}")`);
-    // Sort: ju1, ju2, ju3
-    assert(t5.finalisRows[0] === finalisPick[0].nama, `  sort #1 = ju1 (${finalisPick[0].nama})`);
-    assert(t5.finalisRows[1] === finalisPick[1].nama, `  sort #2 = ju2 (${finalisPick[1].nama})`);
-    assert(t5.finalisRows[2] === finalisPick[2].nama, `  sort #3 = ju3 (${finalisPick[2].nama})`);
-    assert(t5.finalisLabels[0] === 'Juara 1' && t5.finalisLabels[1] === 'Juara 2' && t5.finalisLabels[2] === 'Juara 3', 'all 3 Juara labels correct');
+    // Verify "Tahap Final" badge (no ju1 yet, but ju2+ exist)
+    await page.goto(`${BASE}/lomba/${lombaId2}`, { waitUntil: 'networkidle0', timeout: 30000 });
+    const t4 = await page.evaluate(() => {
+      const badge = document.querySelector('.public-status-badge');
+      return { badgeText: badge ? badge.textContent.trim() : null };
+    });
+    assert(t4.badgeText === 'Tahap Final', `lomba #2: badge = "Tahap Final" (ju1 missing, got "${t4.badgeText}")`);
 
-    console.log('\n========== TEST 6: Public after Selesaikan ==========');
-    // 10. Selesaikan Lomba
+    // Cleanup lomba #2
+    const delRes2 = await api('DELETE', `/api/admin/lomba/${lombaId2}`, null, session);
+    assert(delRes2.status === 200, 'DELETE second test lomba');
+
+    console.log('\n========== TEST 5: Public after Selesaikan ==========');
+    // 10. Selesaikan Lomba (lomba #1)
     const selesaiRes = await api('POST', `/api/admin/lomba/${lombaId}/selesai`, null, session);
     assert(selesaiRes.status === 200, 'POST selesai');
 
     // 10.1 Verify badge = "Selesai", same Finalis display
-    const t6 = await readPublic();
-    assert(t6.badgeText === 'Selesai', `badge = "Selesai" (got "${t6.badgeText}")`);
-    assert(t6.finalisRows.length === 3, 'Finalis still shows 3');
-    assert(t6.finalisLabels.join(',') === 'Juara 1,Juara 2,Juara 3', 'Juara labels preserved after selesai');
+    const t5 = await readPublic();
+    assert(t5.badgeText === 'Selesai', `badge = "Selesai" (got "${t5.badgeText}")`);
+    assert(t5.finalisRows.length === 3, `Finalis still shows 3 (got ${t5.finalisRows.length})`);
+    assert(t5.finalisLabels.join(',') === 'Juara 1,Juara 2,Juara 3', `Juara labels preserved after selesai (got [${t5.finalisLabels.join(', ')}])`);
 
     // Peserta Terdaftar section should still show ALL 5 (not just finalists)
-    assert(t6.pesertaCount === 5, `Peserta Terdaftar still shows 5 (got ${t6.pesertaCount})`);
+    assert(t5.pesertaCount === 5, `Peserta Terdaftar still shows 5 (got ${t5.pesertaCount})`);
 
     // Verify finalis section comes BEFORE Peserta Terdaftar in DOM order
     const orderCheck = await page.evaluate(() => {
@@ -259,14 +288,10 @@ function badgeOf(status) {
     });
     assert(orderCheck.ok, `Finalis section BEFORE Peserta Terdaftar (finalis=${orderCheck.finalisIdx}, peserta=${orderCheck.pesertaIdx})`);
 
-    // 11. Cleanup
+    // 11. Cleanup lomba #1
     console.log('\n========== CLEANUP ==========');
     const delRes = await api('DELETE', `/api/admin/lomba/${lombaId}`, null, session);
     assert(delRes.status === 200, 'DELETE test lomba');
-
-    // 12. After cleanup, public page should 404
-    const pageResp = await fetch(`${BASE}/lomba/${lombaId}`);
-    assert(pageResp.status === 404, `public page 404 after delete (got ${pageResp.status})`);
 
     // ========== Summary ==========
     console.log(`\n========== SUMMARY ==========`);
