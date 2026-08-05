@@ -123,42 +123,6 @@ export default function ApprovalClient({
     }
   }
 
-  async function bulkApprove() {
-    if (pendingCount === 0) return;
-    const ok = await notify.confirm({
-      title: "Approve Pendaftar",
-      message: `Approve ${pendingCount} pendaftar sekaligus?`,
-      confirmText: "Approve Semua",
-    });
-    if (!ok) return;
-    setBusy(-1);
-    try {
-      let count = 0;
-      for (const it of items) {
-        const res = await fetch(`/api/admin/pendaftar/${it.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "disetujui" }),
-        });
-        if (res.ok) count++;
-      }
-      // All approved → list should be empty (no longer pending)
-      setItems([]);
-      // Update stats in real time
-      setLiveStats((prev) => ({
-        ...prev,
-        pending: 0,
-        disetujui: prev.disetujui + count,
-      }));
-      router.refresh();
-      notify.success(`${count} pendaftar berhasil disetujui`);
-    } catch {
-      notify.error("Gagal approve beberapa pendaftar");
-    } finally {
-      setBusy(null);
-    }
-  }
-
   // Bulk delete: 2 scopes
   //   - "pending" → clears the approval queue only (preserves approved/rejected)
   //   - "all"     → nukes everything (used for full reset)
@@ -349,13 +313,6 @@ export default function ApprovalClient({
           />
         </div>
         <button
-          onClick={bulkApprove}
-          disabled={pendingCount === 0 || busy !== null}
-          className="btn btn-primary btn-sm disabled:opacity-50 md:w-auto justify-center"
-        >
-          <i className="fas fa-check-double"></i> Approve Semua ({pendingCount})
-        </button>
-        <button
           onClick={() => bulkDelete("pending")}
           disabled={liveStats.pending === 0 || busy !== null}
           title="Hapus pendaftar yang masih menunggu approval (yang sudah disetujui/ditolak tetap aman)"
@@ -462,7 +419,7 @@ export default function ApprovalClient({
                     <div className="row-actions" style={{ gap: 6 }}>
                       <button
                         onClick={() => setStatus(it.id, "disetujui")}
-                        disabled={busy === it.id || busy === -1 || busy === -2}
+                        disabled={busy === it.id || busy === -2}
                         className="icon-action approve"
                         title="Approve"
                       >
@@ -470,7 +427,7 @@ export default function ApprovalClient({
                       </button>
                       <button
                         onClick={() => setStatus(it.id, "ditolak")}
-                        disabled={busy === it.id || busy === -1 || busy === -2}
+                        disabled={busy === it.id || busy === -2}
                         className="icon-action reject"
                         title="Tolak"
                       >
