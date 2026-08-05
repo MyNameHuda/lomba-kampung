@@ -1,0 +1,130 @@
+// Juara picker API for stage system MVP.
+// POST   = set Juara 1/2/3 for a pendaftar (un-picks existing Juara with same rank)
+// DELETE = clear Juara (set juara_rank = NULL)
+//
+// Juara is scoped per (lomba, kategori). At most 1 Juara per rank per kategori.
+// See lib/db/pendaftar.ts setJuaraRank for the un-pick logic.
+import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { isAuthenticated } from "@/lib/auth";
+import {
+  getLombaById,
+  getPendaftarById,
+  setJuaraRank,
+  clearJuaraRank,
+} from "@/lib/db";
+
+const postSchema = z.object({
+  pendaftarId: z.number().int().positive(),
+  rank: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+});
+
+const deleteSchema = z.object({
+  pendaftarId: z.number().int().positive(),
+});
+
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await isAuthenticated())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { id: lombaIdStr } = await params;
+  const lombaId = Number(lombaIdStr);
+  if (isNaN(lombaId)) return NextResponse.json({ error: "Invalid lomba id" }, { status: 400 });
+
+  try {
+    const body = await req.json();
+    const data = postSchema.parse(body);
+
+    // Validate lomba
+    const lomba = await getLombaById(lombaId);
+    if (!lomba) return NextResponse.json({ error: "Lomba tidak ditemukan" }, { status: 404 });
+    if (lomba.status !== "aktif") {
+      return NextResponse.json(
+        { error: `Lomba berstatus '${lomba.status}', tidak bisa pilih Juara` },
+        { status: 400 }
+      );
+    }
+
+    // Validate pendaftar
+    const p = await getPendaftarById(data.pendaftarId);
+    if (!p) return NextResponse.json({ error: "Pendaftar tidak ditemukan" }, { status: 404 });
+    if (p.lombaId !== lombaId) {
+      return NextResponse.json(
+        { error: "Pendaftar bukan dari lomba ini" },
+        { status: 400 }
+      );
+    }
+    if (p.status !== "disetujui") {
+      return NextResponse.json(
+        { error: `Pendaftar berstatus '${p.status}', hanya 'disetujui' yang bisa dipilih` },
+        { status: 400 }
+      );
+    }
+    if (!lomba.kategoriEligible.includes(p.kategoriId)) {
+      return NextResponse.json(
+        { error: `Kategori '${p.kategoriId}' bukan eligible untuk lomba ini` },
+        { status: 400 }
+      );
+    }
+
+    // Set Juara (atomically un-picks existing Juara with same rank in same (lomba, kategori))
+    await setJuaraRank(data.pendaftarId, data.rank);
+
+    // Invalidate all relevant pages
+    revalidatePath("/admin/lomba");
+    revalidatePath(`/admin/lomba/${lombaId}`);
+    revalidatePath(`/lomba/${lombaId}`);
+
+    return NextResponse.json({
+      ok: true,
+      pendaftarId: data.pendaftarId,
+      rank: data.rank,
+      kategoriId: p.kategoriId,
+    });
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return NextResponse.json({ error: "Data tidak valid", details: e.issues }, { status: 400 });
+    }
+    console.error(e);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await isAuthenticated())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { id: lombaIdStr } = await params;
+  const lombaId = Number(lombaIdStr);
+  if (isNaN(lombaId)) return NextResponse.json({ error: "Invalid lomba id" }, { status: 400 });
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const data = deleteSchema.parse(body);
+
+    // Validate pendaftar (lomba validation skipped — clear is a no-op for wrong lomba)
+    const p = await getPendaftarById(data.pendaftarId);
+    if (!p) return NextResponse.json({ error: "Pendaftar tidak ditemukan" }, { status: 404 });
+    if (p.lombaId !== lombaId) {
+      return NextResponse.json(
+        { error: "Pendaftar bukan dari lomba ini" },
+        { status: 400 }
+      );
+    }
+
+    await clearJuaraRank(data.pendaftarId);
+
+    revalidatePath("/admin/lomba");
+    revalidatePath(`/admin/lomba/${lombaId}`);
+    revalidatePath(`/lomba/${lombaId}`);
+
+    return NextResponse.json({ ok: true, pendaftarId: data.pendaftarId });
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return NextResponse.json({ error: "Data tidak valid", details: e.issues }, { status: 400 });
+    }
+    console.error(e);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+}
