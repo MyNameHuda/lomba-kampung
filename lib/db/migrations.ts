@@ -34,14 +34,19 @@ export async function ensureKualifikasiColumns(): Promise<void> {
 //   for this (lomba, kategori). NULL = kualifikasi ongoing for this kategori.
 //   Per-kategori (independen) — different kategori can be in different phases.
 //
-// Implementation note: per-column try/catch because batch() is atomic and
-// SQLite ALTER errors would abort the whole batch. The previous PRAGMA +
-// ALTER approach had a race where PRAGMA saw the column but a subsequent
-// SELECT in the same request failed — likely due to libSQL HTTP using
-// separate statement connections.
-export async function ensureKualifikasiV4Columns(): Promise<void> {
-  await runOrIgnore("ALTER TABLE pendaftar ADD COLUMN is_finalist INTEGER");
-  await runOrIgnore("ALTER TABLE lomba_kategori ADD COLUMN kualifikasi_tutup_at INTEGER");
+// Implementation: module-level Promise singleton. The migration runs exactly
+// once per Lambda instance, with all callers awaiting the same promise.
+// This avoids the libSQL HTTP race where PRAGMA + ALTER + SELECT on separate
+// connections see different schema states.
+let v4MigrationPromise: Promise<void> | null = null;
+export function ensureKualifikasiV4Columns(): Promise<void> {
+  if (!v4MigrationPromise) {
+    v4MigrationPromise = (async () => {
+      await runOrIgnore("ALTER TABLE pendaftar ADD COLUMN is_finalist INTEGER");
+      await runOrIgnore("ALTER TABLE lomba_kategori ADD COLUMN kualifikasi_tutup_at INTEGER");
+    })();
+  }
+  return v4MigrationPromise;
 }
 
 async function runOrIgnore(sql: string): Promise<void> {
