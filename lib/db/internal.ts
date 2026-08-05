@@ -33,9 +33,9 @@ export const toCamelAll = <T>(rows: DbRow[]): T[] => rows.map((r) => toCamel<T>(
 // =================== Migration helpers ===================
 // Idempotent migration helper for adding new columns to existing tables.
 // SQLite has no "ADD COLUMN IF NOT EXISTS", so we check PRAGMA table_info first.
+import { run } from "./client";
 export async function ensureColumn(table: string, column: string, definition: string): Promise<void> {
   const cols = await all<{ name: string }>(`PRAGMA table_info(${table})`);
   if (cols.some((c) => c.name === column)) return;
-  const { run } = await import("./client");
   await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
