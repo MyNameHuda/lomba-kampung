@@ -475,6 +475,16 @@
 }
 /* =================== End juara picker =================== */
 
+/* Phase badge (kualifikasi / final / etc.) */
+.phase-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 10px; font-weight: 800;
+  padding: 3px 8px; border-radius: 999px;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  background: #FCE0E0; color: #9D1010;
+  white-space: nowrap;
+}
+
 /* =================== Juara public display =================== */
 /* Used on /lomba/[id] for warga. Smaller, simpler than admin picker — just
    shows medal + name + label, no buttons. */

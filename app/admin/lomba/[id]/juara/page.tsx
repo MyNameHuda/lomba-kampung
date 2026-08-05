@@ -1,6 +1,9 @@
-// Juara picker page for stage system MVP.
-// Admin selects Juara 1/2/3 per kategori. Once all kategori have
-// at least Juara 1 + Juara 2, admin can "Selesaikan Lomba".
+// Juara picker page for stage system v3 (kualifikasi + Juara).
+// Admin flow:
+//  1. phase=NULL → click "Mulai Kualifikasi" → phase='kualifikasi'
+//  2. phase='kualifikasi' → admin selects finalists per kategori → click "Tutup Kualifikasi"
+//  3. phase='final' → admin selects Juara 1/2/3 from finalists → click "Selesaikan Lomba"
+//  4. status='selesai' → view-only display
 import AdminShell from "@/components/admin-shell";
 import JuaraClient, { type PendaftarWithJuara } from "./juara-client";
 import {
@@ -9,6 +12,7 @@ import {
   getKategori,
   getJuaraByLomba,
   getJuaraReadiness,
+  getKualifikasiReadiness,
   type JuaraSlim,
 } from "@/lib/db";
 import { notFound } from "next/navigation";
@@ -23,17 +27,18 @@ export default async function JuaraPage({ params }: { params: Promise<{ id: stri
   const l = await getLombaById(lombaId);
   if (!l) notFound();
 
-  // Parallelize: pendaftar, kategori, juara, readiness are all independent
-  const [pendaftar, kats, juaraMap, readiness] = await Promise.all([
+  // Parallelize: pendaftar, kategori, juara, readiness, kualifikasi-readiness
+  const [pendaftar, kats, juaraMap, readiness, kualifikasiReadiness] = await Promise.all([
     getPendaftarByLomba(lombaId, "disetujui"),
     getKategori(),
     getJuaraByLomba(lombaId),
     getJuaraReadiness(lombaId),
+    getKualifikasiReadiness(lombaId),
   ]);
   const katMap = new Map(kats.map((k) => [k.id, k]));
 
-  // Build a quick lookup: pendaftarId → juaraRank (for fast client access)
-  const juaraById = new Map<number, 1 | 2 | 3>();
+  // Build a quick lookup: pendaftarId → juaraRank (number, since kualifikasi rank is 1..finalisCount)
+  const juaraById = new Map<number, number>();
   for (const arr of Object.values(juaraMap)) {
     for (const j of arr) juaraById.set(j.pendaftarId, j.juaraRank);
   }
@@ -90,9 +95,12 @@ export default async function JuaraPage({ params }: { params: Promise<{ id: stri
           nama: l.nama,
           emoji: l.emoji,
           status: l.status,
+          finalisCount: l.finalisCount,
+          phase: l.phase,
         }}
         sections={sections}
         readiness={readiness}
+        kualifikasiReadiness={kualifikasiReadiness}
       />
     </AdminShell>
   );
