@@ -66,6 +66,9 @@ export type Pendaftar = {
   alasanTolak: string | null;
   sumber: SumberPendaftaran;
   hadir: boolean;
+  // Juara 1/2/3 within (lomba, kategori). NULL = not picked.
+  // Enforced: at most 1 Juara per rank per (lomba, kategori).
+  juaraRank: 1 | 2 | 3 | null;
   createdAt: number;
   updatedAt: number;
 };

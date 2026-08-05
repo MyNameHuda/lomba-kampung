@@ -10,6 +10,13 @@ export async function ensureKategoriColorColumns(): Promise<void> {
   await ensureColumn("kategori", "color_border", "TEXT NOT NULL DEFAULT '#FDE68A'");
 }
 
+// Self-healing: ensure pendaftar has juara_rank column for stage system.
+// NULL = not a Juara; 1, 2, 3 = Juara rank within (lomba, kategori).
+// Per (lomba, kategori) only one Juara 1 / 2 / 3 is allowed (enforced in app code).
+export async function ensureJuaraColumn(): Promise<void> {
+  await ensureColumn("pendaftar", "juara_rank", "INTEGER");
+}
+
 // Self-healing: ensure lomba_kategori supports multiple PJs per (lomba, kategori).
 // Old PK: (lomba_id, kategori_id) — only 1 PJ allowed per combo.
 // New PK: (lomba_id, kategori_id, urutan) — multiple PJs allowed, ordered by `urutan`.

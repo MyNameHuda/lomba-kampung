@@ -22,7 +22,7 @@ export type {
 } from "./types";
 
 // Migrations (idempotent — safe to call repeatedly)
-export { ensureKategoriColorColumns, ensurePjMultiSupport } from "./migrations";
+export { ensureKategoriColorColumns, ensurePjMultiSupport, ensureJuaraColumn } from "./migrations";
 
 // Settings
 export { getSettings, updateSettings, updateAdminPassword } from "./settings";
@@ -57,6 +57,11 @@ export {
   countPendaftarHadir,
   countPendaftarByLomba,
   groupPendaftarForLomba,
+  setJuaraRank,
+  clearJuaraRank,
+  getJuaraByLomba,
+  countJuaraByKategori,
+  type JuaraSlim,
 } from "./pendaftar";
 
 // Backup / reset

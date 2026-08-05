@@ -4,6 +4,7 @@
 import { all, get, run, type DbRow, type DbValue } from "./client";
 import { toCamel, toCamelAll } from "./internal";
 import { getKategori } from "./kategori";
+import { ensureJuaraColumn } from "./migrations";
 import type { DisplaySection, DisplaySectionKey, JenisKelamin, Pendaftar, PendaftarStatus } from "./types";
 
 // =================== Read ===================
@@ -31,10 +32,11 @@ export async function getPendaftarById(id: number): Promise<Pendaftar | null> {
 
 // =================== Write ===================
 export async function createPendaftar(
-  data: Omit<Pendaftar, "id" | "nomor" | "createdAt" | "updatedAt" | "status" | "alasanTolak" | "hadir"> & {
+  data: Omit<Pendaftar, "id" | "nomor" | "createdAt" | "updatedAt" | "status" | "alasanTolak" | "hadir" | "juaraRank"> & {
     status?: PendaftarStatus;
     alasanTolak?: string | null;
     hadir?: boolean;
+    juaraRank?: 1 | 2 | 3 | null;
   }
 ): Promise<{ id: number; nomor: string }> {
   const year = new Date().getFullYear();
@@ -83,6 +85,7 @@ export async function updatePendaftar(id: number, updates: Partial<Pendaftar>): 
     alasanTolak: "alasan_tolak",
     sumber: "sumber",
     hadir: "hadir",
+    juaraRank: "juara_rank",
     createdAt: "created_at",
     updatedAt: "updated_at",
   };
@@ -90,6 +93,12 @@ export async function updatePendaftar(id: number, updates: Partial<Pendaftar>): 
     if (k === "id" || k === "createdAt" || k === "updatedAt") continue;
     if (k === "hadir") { sets.push("hadir = ?"); vals.push(v ? 1 : 0); }
     else { sets.push(`${map[k as keyof Pendaftar]} = ?`); vals.push(v as string | number | null); }
+  }
+  // Auto-clear juara_rank when a pendaftar is rejected — they're no longer
+  // eligible to hold a Juara rank in this (lomba, kategori).
+  if (updates.status === "ditolak") {
+    sets.push("juara_rank = ?");
+    vals.push(null);
   }
   if (sets.length === 0) return;
   sets.push("updated_at = unixepoch()");
@@ -247,4 +256,134 @@ export async function groupPendaftarForLomba(lombaId: number): Promise<{
     dewasa: dewasa.map((r) => ({ nama: r.nama, umur: r.umur })),
     sections,
   };
+}
+
+// =================== Juara (stage system MVP) ===================
+// Juara 1/2/3 are picked per (lomba, kategori). Scope is enforced via
+// WHERE clause on lomba_id + kategori_id + juara_rank. No DB-level
+// uniqueness constraint (libSQL doesn't enforce partial unique indexes
+// the way Postgres does), so app code MUST always go through setJuaraRank
+// which un-picks existing Juara with the same rank first.
+
+// Slim shape used by client + public Juara display.
+export type JuaraSlim = {
+  pendaftarId: number;
+  nama: string;
+  kategoriId: string;
+  juaraRank: 1 | 2 | 3;
+  umur: number;
+  jenisKelamin: JenisKelamin;
+};
+
+/**
+ * Set Juara rank for a pendaftar. Atomically:
+ *  1. Un-pick any existing Juara with the same rank in the same (lomba, kategori)
+ *  2. Set this pendaftar to the new rank
+ * Returns the pendaftar's (lomba, kategori) so caller can revalidate paths.
+ * If pendaftarId doesn't exist, no-op (API layer should validate first).
+ */
+export async function setJuaraRank(
+  pendaftarId: number,
+  rank: 1 | 2 | 3
+): Promise<{ lombaId: number; kategoriId: string } | null> {
+  await ensureJuaraColumn();
+  // Get the (lomba, kategori) of the target pendaftar so the un-pick is scoped
+  const p = await get<{ lomba_id: number; kategori_id: string }>(
+    "SELECT lomba_id, kategori_id FROM pendaftar WHERE id = ?",
+    pendaftarId
+  );
+  if (!p) return null;
+
+  // Step 1: un-pick old Juara with same rank in same (lomba, kategori)
+  await run(
+    `UPDATE pendaftar SET juara_rank = NULL
+     WHERE lomba_id = ? AND kategori_id = ? AND juara_rank = ? AND id != ?`,
+    p.lomba_id,
+    p.kategori_id,
+    rank,
+    pendaftarId
+  );
+  // Step 2: set new Juara
+  await run(
+    "UPDATE pendaftar SET juara_rank = ? WHERE id = ?",
+    rank,
+    pendaftarId
+  );
+  return { lombaId: p.lomba_id, kategoriId: p.kategori_id };
+}
+
+/**
+ * Clear Juara rank for a pendaftar (set to NULL).
+ * No-op if pendaftar already has no Juara rank.
+ */
+export async function clearJuaraRank(pendaftarId: number): Promise<void> {
+  await run(
+    "UPDATE pendaftar SET juara_rank = NULL WHERE id = ?",
+    pendaftarId
+  );
+}
+
+/**
+ * Get all Juara (1/2/3) for a lomba, grouped by kategori.
+ * Returns Map<kategoriId, JuaraSlim[]>. Each kategori array is sorted
+ * by juaraRank ASC. Kategori with no Juara are absent from the map.
+ */
+export async function getJuaraByLomba(
+  lombaId: number
+): Promise<Record<string, JuaraSlim[]>> {
+  await ensureJuaraColumn();
+  const rows = await all<{
+    id: number;
+    nama: string;
+    kategori_id: string;
+    juara_rank: number;
+    umur: number;
+    jenis_kelamin: JenisKelamin;
+  }>(
+    `SELECT id, nama, kategori_id, juara_rank, umur, jenis_kelamin
+     FROM pendaftar
+     WHERE lomba_id = ? AND juara_rank IS NOT NULL
+     ORDER BY kategori_id, juara_rank`,
+    lombaId
+  );
+  const grouped: Record<string, JuaraSlim[]> = {};
+  for (const r of rows) {
+    if (!grouped[r.kategori_id]) grouped[r.kategori_id] = [];
+    grouped[r.kategori_id].push({
+      pendaftarId: r.id,
+      nama: r.nama,
+      kategoriId: r.kategori_id,
+      juaraRank: r.juara_rank as 1 | 2 | 3,
+      umur: r.umur,
+      jenisKelamin: r.jenis_kelamin,
+    });
+  }
+  return grouped;
+}
+
+/**
+ * Count Juara per rank for a (lomba, kategori). Used to validate
+ * "Selesaikan Lomba" (need at least Juara 1 + Juara 2 per kategori).
+ * Returns Record<rank, count>. Absent keys mean count = 0.
+ */
+export async function countJuaraByKategori(
+  lombaId: number,
+  kategoriId: string
+): Promise<Record<1 | 2 | 3, number>> {
+  await ensureJuaraColumn();
+  const rows = await all<{ juara_rank: number; c: number }>(
+    `SELECT juara_rank, COUNT(*) as c
+     FROM pendaftar
+     WHERE lomba_id = ? AND kategori_id = ? AND juara_rank IS NOT NULL
+     GROUP BY juara_rank`,
+    lombaId,
+    kategoriId
+  );
+  const out: Record<1 | 2 | 3, number> = { 1: 0, 2: 0, 3: 0 };
+  for (const r of rows) {
+    if (r.juara_rank === 1 || r.juara_rank === 2 || r.juara_rank === 3) {
+      out[r.juara_rank] = Number(r.c);
+    }
+  }
+  return out;
 }

@@ -68,6 +68,11 @@ CREATE TABLE IF NOT EXISTS pendaftar (
   alasan_tolak TEXT,
   sumber TEXT NOT NULL DEFAULT 'publik',
   hadir INTEGER NOT NULL DEFAULT 0,
+  -- Juara 1/2/3 within (lomba, kategori). NULL = not picked.
+  -- Per (lomba, kategori) only one Juara per rank allowed (enforced in app code
+  -- by setJuaraRank un-picking existing Juara with same rank first).
+  -- Existing installs are migrated by `ensureJuaraColumn()` in lib/db/index.ts.
+  juara_rank INTEGER,
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
