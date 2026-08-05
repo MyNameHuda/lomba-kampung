@@ -376,6 +376,105 @@
 
 /* =================== End approval list =================== */
 
+/* =================== Juara picker (stage system) =================== */
+/* Mobile-first, generous touch targets, color-coded per Juara rank. */
+.juara-section {
+  background: white;
+  border: 1px solid #E5E7EB;
+  border-radius: 14px;
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.juara-section-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px;
+  background: linear-gradient(90deg, #FDF5F5 0%, #FFFFFF 100%);
+  border-bottom: 1px solid #F3F4F6;
+  flex-wrap: wrap;
+}
+.juara-section-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0;
+}
+.juara-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 11px; font-weight: 800;
+  padding: 3px 8px; border-radius: 999px;
+  min-width: 32px; justify-content: center;
+  border: 1.5px solid transparent;
+  font-variant-numeric: tabular-nums;
+}
+.juara-badge.rank-1.empty { background: #FFF7E0; color: #92400E; border-color: #FDE68A; }
+.juara-badge.rank-1.filled { background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%); color: white; border-color: #B8860B; }
+.juara-badge.rank-2.empty { background: #F3F4F6; color: #6B7280; border-color: #D1D5DB; }
+.juara-badge.rank-2.filled { background: linear-gradient(135deg, #C0C0C0 0%, #808080 100%); color: white; border-color: #696969; }
+.juara-badge.rank-3.empty { background: #FEF3C7; color: #92400E; border-color: #FBBF24; }
+.juara-badge.rank-3.filled { background: linear-gradient(135deg, #CD7F32 0%, #8B4513 100%); color: white; border-color: #654321; }
+.juara-status-pill {
+  font-size: 10px; font-weight: 800;
+  padding: 3px 8px; border-radius: 999px;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+.juara-status-pill.ready { background: #DCFCE7; color: #15803D; }
+.juara-status-pill.pending { background: #FEF3C7; color: #92400E; }
+
+.juara-card {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #F3F4F6;
+  border-left: 4px solid transparent;
+  transition: background 0.15s;
+}
+.juara-card:last-child { border-bottom: none; }
+.juara-card.is-juara-1 { background: #FFFBEB; }
+.juara-card.is-juara-2 { background: #F9FAFB; }
+.juara-card.is-juara-3 { background: #FEF3C7; }
+.juara-card:hover { background: #F3F4F6; }
+.juara-nama {
+  font-size: 14px; font-weight: 700; color: #1F2937; line-height: 1.3;
+  word-break: break-word;
+}
+.juara-meta {
+  font-size: 11px; color: #6B7280; margin-top: 1px;
+}
+.juara-actions {
+  display: flex; gap: 4px; flex-shrink: 0; align-items: center;
+}
+.juara-rank-btn {
+  width: 34px; height: 34px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; line-height: 1;
+  background: white; border: 1.5px solid #E5E7EB;
+  cursor: pointer; transition: all 0.15s;
+  filter: grayscale(60%);
+  opacity: 0.7;
+}
+.juara-rank-btn:hover { transform: scale(1.05); opacity: 1; }
+.juara-rank-btn.active { filter: none; opacity: 1; transform: scale(1.05); }
+.juara-rank-btn.rank-1.active { background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%); border-color: #B8860B; }
+.juara-rank-btn.rank-2.active { background: linear-gradient(135deg, #E5E7EB 0%, #9CA3AF 100%); border-color: #6B7280; }
+.juara-rank-btn.rank-3.active { background: linear-gradient(135deg, #FCD34D 0%, #D97706 100%); border-color: #92400E; }
+.juara-rank-btn:disabled { cursor: not-allowed; opacity: 0.4; }
+.juara-clear-btn {
+  width: 28px; height: 28px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: #9CA3AF; background: transparent;
+  border: 1px solid transparent; cursor: pointer;
+  margin-left: 4px;
+}
+.juara-clear-btn:hover { color: #991B1B; background: #FEE2E2; border-color: #FECACA; }
+.juara-medal {
+  font-size: 28px; line-height: 1; flex-shrink: 0;
+}
+.juara-empty {
+  display: flex; align-items: center; gap: 10px;
+  padding: 16px 14px;
+  font-size: 12px; color: #9CA3AF;
+}
+/* =================== End juara picker =================== */
+
 /* Mobile page styles */
 .mobile-page { min-height: 100vh; display: flex; flex-direction: column; }
 .app-header {

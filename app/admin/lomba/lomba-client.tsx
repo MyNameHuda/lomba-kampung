@@ -184,6 +184,9 @@ export default function LombaClient({ initial, kats, counts }: { initial: Lomba[
                       <Link href={`/admin/peserta/${l.id}`} className="icon-action" title="Peserta">
                         <i className="fas fa-users"></i>
                       </Link>
+                      <Link href={`/admin/lomba/${l.id}/juara`} className="icon-action" title="Pilih Juara">
+                        <i className="fas fa-trophy"></i>
+                      </Link>
                       <button onClick={() => { setEditing(l); setCreating(true); }} className="icon-action" title="Edit">
                         <i className="fas fa-pen"></i>
                       </button>
