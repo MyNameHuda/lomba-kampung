@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useNotify } from "@/components/notify-provider";
@@ -16,9 +16,22 @@ type Lomba = LombaFormData & {
   id: number;
   pjByKategori: Record<string, Pj[]>;
   jadwalByKategori: Record<string, JadwalInput>;
-  // Server-side derived: from lomba.pendaftaran_dibuka column
-  // (always present in the row from the server, but we already have it
-  // in LombaFormData so we just rely on that). The type is already included.
+};
+
+type StatusFilter = "all" | "aktif" | "selesai" | "draft";
+type SortBy = "urutan" | "nama" | "peserta";
+
+const STATUS_LABEL: Record<StatusFilter, string> = {
+  all: "Semua",
+  aktif: "Aktif",
+  selesai: "Selesai",
+  draft: "Draft",
+};
+
+const STATUS_BADGE: Record<Lomba["status"], string> = {
+  aktif: "status-approved",
+  selesai: "status-hadir",
+  draft: "status-pending",
 };
 
 export default function LombaClient({
@@ -40,10 +53,38 @@ export default function LombaClient({
   const [busy, setBusy] = useState<number | null>(null);
   const [error, setError] = useState("");
 
+  // Toolbar state
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sortBy, setSortBy] = useState<SortBy>("urutan");
+
   // Sync local items with server-provided initial prop after router.refresh()
   useEffect(() => {
     setItems(initial);
   }, [initial]);
+
+  // Status counts (for chip badges)
+  const statusCounts = useMemo(() => {
+    const c: Record<StatusFilter, number> = { all: items.length, aktif: 0, selesai: 0, draft: 0 };
+    for (const l of items) c[l.status]++;
+    return c;
+  }, [items]);
+
+  // Filter + sort
+  const visibleItems = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let result = items.filter((l) => {
+      if (q && !l.nama.toLowerCase().includes(q)) return false;
+      if (statusFilter !== "all" && l.status !== statusFilter) return false;
+      return true;
+    });
+    result = [...result].sort((a, b) => {
+      if (sortBy === "nama") return a.nama.localeCompare(b.nama);
+      if (sortBy === "peserta") return (counts[b.id] || 0) - (counts[a.id] || 0);
+      return a.urutan - b.urutan;
+    });
+    return result;
+  }, [items, search, statusFilter, sortBy, counts]);
 
   async function saveLomba(data: LombaFormData & { pjList: PjInput[]; jadwalList: JadwalInput[] }) {
     setError("");
@@ -137,13 +178,91 @@ export default function LombaClient({
     }
   }
 
+  const isFiltered = search.trim() !== "" || statusFilter !== "all";
+
   return (
     <>
-      <div className="flex justify-center mb-4">
-        <button onClick={() => { setEditing(null); setCreating(true); }} className="btn btn-primary btn-sm">
+      {/* ====== Toolbar: search + add button ====== */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-3">
+        <div className="flex-1 relative">
+          <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF] text-sm"></i>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Cari nama lomba..."
+            className="w-full pl-10 pr-10 py-2.5 border border-[#E5E7EB] rounded-lg text-sm bg-white focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary-light transition-colors"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-[#9CA3AF] hover:bg-[#F3F4F6] hover:text-[#6B7280] flex items-center justify-center"
+              aria-label="Bersihkan pencarian"
+            >
+              <i className="fas fa-xmark text-[12px]"></i>
+            </button>
+          )}
+        </div>
+        <button
+          onClick={() => { setEditing(null); setCreating(true); }}
+          className="btn btn-primary whitespace-nowrap"
+          style={{ width: "auto" }}
+        >
           <i className="fas fa-plus"></i> Tambah Lomba
         </button>
       </div>
+
+      {/* ====== Filter chips + sort dropdown ====== */}
+      <div className="flex items-center gap-2 mb-3 -mx-4 px-4 overflow-x-auto pb-1">
+        {(Object.keys(STATUS_LABEL) as StatusFilter[]).map((s) => {
+          const isActive = statusFilter === s;
+          const count = statusCounts[s];
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setStatusFilter(s)}
+              className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold border-2 transition-colors ${
+                isActive
+                  ? "bg-primary border-primary text-white"
+                  : "bg-white border-[#E5E7EB] text-[#6B7280] hover:border-primary hover:text-primary"
+              }`}
+            >
+              {STATUS_LABEL[s]}
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${isActive ? "bg-white/25" : "bg-[#F3F4F6]"}`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value as SortBy)}
+          className="ml-auto shrink-0 px-3 py-1.5 border-2 border-[#E5E7EB] rounded-full text-[12px] font-semibold bg-white text-[#374151] focus:outline-none focus:border-primary"
+          aria-label="Urutkan"
+        >
+          <option value="urutan">Urut: Posisi</option>
+          <option value="nama">Urut: Nama (A-Z)</option>
+          <option value="peserta">Urut: Peserta Terbanyak</option>
+        </select>
+      </div>
+
+      {/* ====== Result count + clear button ====== */}
+      {isFiltered && (
+        <div className="flex items-center justify-between text-[12px] text-[#6B7280] mb-3">
+          <span>
+            Menampilkan <strong className="text-[#1F2937]">{visibleItems.length}</strong> dari {items.length} lomba
+          </span>
+          <button
+            type="button"
+            onClick={() => { setSearch(""); setStatusFilter("all"); }}
+            className="text-primary font-semibold hover:underline"
+          >
+            <i className="fas fa-xmark text-[10px]"></i> Reset filter
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="bg-[#FEE2E2] border border-[#FECACA] text-[#991B1B] text-sm rounded p-3.5 mb-4 leading-relaxed">
@@ -151,134 +270,141 @@ export default function LombaClient({
         </div>
       )}
 
-      <div className="card overflow-hidden">
-        <table className="admin-table mobile-card-table">
-          <thead>
-            <tr>
-              <th>Lomba</th>
-              <th>Kategori</th>
-              <th>Peserta</th>
-              <th>Juara</th>
-              <th>Status</th>
-              <th>Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((l) => {
-              const eligibleKats = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
-                .map((kid) => kats.find((k) => k.id === kid))
-                .filter((k): k is NonNullable<typeof k> => !!k);
-              return (
-                <tr key={l.id}>
-                  <td className="cell-primary" data-label="Lomba">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-10 h-10 rounded-lg bg-primary-light flex items-center justify-center text-xl">{l.emoji}</div>
-                      <div className="flex flex-col gap-0.5 leading-snug min-w-0">
-                        <div className="font-semibold text-[13px]">{l.nama}</div>
-                        {l.deskripsi && <div className="text-[11px] text-[#6B7280]">{l.deskripsi}</div>}
-                      </div>
-                    </div>
-                  </td>
-                  <td data-label="Kategori">
-                    <div className="flex flex-col gap-1.5">
-                      {eligibleKats.map((k) => {
-                        const j = l.jadwalByKategori?.[k.id];
-                        const hasJadwal = j && (j.tanggal != null || j.jam);
-                        return (
-                          <div key={k.id} className="flex flex-col gap-0.5 leading-snug">
-                            <KatTag
-                              nama={k.nama}
-                              colorBg={k.colorBg}
-                              colorText={k.colorText}
-                              colorBorder={k.colorBorder}
-                            />
-                            {hasJadwal ? (
-                              <div className="text-[10px] text-[#6B7280] flex items-center gap-1 pl-1">
-                                <i className="far fa-calendar text-[10px] text-primary"></i>
-                                <span className="font-semibold text-[#374151]">
-                                  {j!.tanggal != null ? formatTanggalLomba(j!.tanggal as number, "short") : "—"}
-                                </span>
-                                {j!.jam && <span className="text-[#9CA3AF]">· {j!.jam}</span>}
-                              </div>
-                            ) : (
-                              <div className="text-[10px] text-[#9CA3AF] pl-1 italic">Belum dijadwalkan</div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </td>
-                  <td data-label="Peserta">
-                    <div className="flex flex-col gap-0.5 leading-snug whitespace-nowrap">
-                      <div className="font-semibold">{counts[l.id] || 0} <span className="text-[10px] font-normal text-[#9CA3AF]">pendaftar</span></div>
-                      <div className="text-[10px] text-[#9CA3AF]"><i className="fas fa-infinity"></i> Tanpa batas</div>
-                    </div>
-                  </td>
-                  <td data-label="Juara">
-                    {(() => {
-                      const js = juaraSummary[l.id];
-                      if (!js || js.totalJuara === 0) {
-                        return <span className="text-[11px] text-[#9CA3AF]">—</span>;
-                      }
-                      if (l.status === "selesai") {
-                        return (
-                          <span className="lomba-juara-chip done">
-                            <i className="fas fa-trophy"></i> {js.totalJuara} Juara
-                          </span>
-                        );
-                      }
-                      if (js.allReady) {
-                        return (
-                          <span className="lomba-juara-chip ready">
-                            <i className="fas fa-check-circle"></i> {js.totalJuara} Juara
-                          </span>
-                        );
-                      }
-                      return (
-                        <span className="lomba-juara-chip picking">
-                          <i className="fas fa-trophy"></i> {js.totalJuara} dipilih
-                        </span>
-                      );
-                    })()}
-                  </td>
-                  <td data-label="Status">
+      {/* ====== Card grid ====== */}
+      {visibleItems.length === 0 ? (
+        <div className="card p-10 text-center text-[#6B7280]">
+          <i className={`fas ${items.length === 0 ? "fa-trophy" : "fa-search"} text-5xl text-[#D1D5DB] mb-3 block`}></i>
+          <strong className="block text-[#1F2937] text-base mb-1">
+            {items.length === 0 ? "Belum ada lomba" : "Tidak ada lomba yang cocok"}
+          </strong>
+          <p className="text-[13px]">
+            {items.length === 0
+              ? 'Klik "Tambah Lomba" untuk mulai.'
+              : "Coba kata kunci lain atau ubah filter status."}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+          {visibleItems.map((l) => {
+            const eligibleKats = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
+              .map((kid) => kats.find((k) => k.id === kid))
+              .filter((k): k is NonNullable<typeof k> => !!k);
+            const js = juaraSummary[l.id];
+            const totalPeserta = counts[l.id] || 0;
+            const totalJuara = js?.totalJuara || 0;
+            return (
+              <article
+                key={l.id}
+                className="bg-white border border-[#E5E7EB] rounded-xl p-4 hover:border-primary hover:shadow-md transition-all flex flex-col gap-3"
+              >
+                {/* Header: emoji + name + status */}
+                <div className="flex items-start gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-accent text-white flex items-center justify-center text-2xl flex-shrink-0 shadow-sm">
+                    {l.emoji}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-bold text-[15px] text-[#1F2937] leading-tight mb-1.5 break-words">
+                      {l.nama}
+                    </h3>
                     <button
                       onClick={() => toggleStatus(l)}
                       disabled={busy === l.id}
-                      className={`status-badge ${l.status === "aktif" ? "status-approved" : l.status === "selesai" ? "status-hadir" : "status-pending"}`}
-                      title="Klik untuk toggle"
+                      className={`status-badge ${STATUS_BADGE[l.status]}`}
+                      title="Klik untuk toggle aktif/selesai"
                     >
                       <i className="fas fa-circle" style={{ fontSize: 6 }}></i> {l.status}
                     </button>
-                  </td>
-                  <td className="cell-actions" data-label="Aksi">
-                    <div className="row-actions">
-                      <Link href={`/lomba/${l.id}`} target="_blank" className="icon-action" title="Lihat publik">
-                        <i className="fas fa-eye"></i>
-                      </Link>
-                      <Link href={`/admin/peserta/${l.id}`} className="icon-action" title="Peserta">
-                        <i className="fas fa-users"></i>
-                      </Link>
-                      <Link href={`/admin/lomba/${l.id}/juara`} className="icon-action" title="Pilih Juara">
-                        <i className="fas fa-trophy"></i>
-                      </Link>
-                      <button onClick={() => { setEditing(l); setCreating(true); }} className="icon-action" title="Edit">
-                        <i className="fas fa-pen"></i>
-                      </button>
-                      <button onClick={async () => await deleteLomba(l.id, l.nama)} disabled={busy === l.id} className="icon-action reject" title="Hapus">
-                        <i className="fas fa-trash"></i>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            {items.length === 0 && (
-              <tr><td colSpan={6} className="text-center py-8 text-[#6B7280] empty-state-cell">Belum ada lomba. Klik "Tambah Lomba" untuk mulai.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                  </div>
+                </div>
+
+                {/* Description */}
+                {l.deskripsi && (
+                  <p className="text-[12px] text-[#6B7280] leading-relaxed line-clamp-2">
+                    {l.deskripsi}
+                  </p>
+                )}
+
+                {/* Tags: kategori + tanggal */}
+                {eligibleKats.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    {eligibleKats.map((k) => {
+                      const j = l.jadwalByKategori?.[k.id];
+                      const hasJadwal = j && j.tanggal != null;
+                      return (
+                        <div key={k.id} className="flex items-center gap-2 flex-wrap">
+                          <KatTag
+                            nama={k.nama}
+                            colorBg={k.colorBg}
+                            colorText={k.colorText}
+                            colorBorder={k.colorBorder}
+                          />
+                          {hasJadwal ? (
+                            <span className="text-[10px] text-[#6B7280] flex items-center gap-1">
+                              <i className="far fa-calendar text-primary"></i>
+                              <span className="font-semibold text-[#374151]">
+                                {formatTanggalLomba(j!.tanggal as number, "short")}
+                              </span>
+                              {j!.jam && <span className="text-[#9CA3AF]">· {j!.jam}</span>}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-[#9CA3AF] italic">Belum dijadwalkan</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Stats row */}
+                <div className="flex items-center gap-4 py-2.5 border-t border-b border-[#F3F4F6] text-[12px] text-[#374151]">
+                  <div className="flex items-center gap-1.5">
+                    <i className="fas fa-users text-[#6B7280]"></i>
+                    <span><strong className="text-[#1F2937]">{totalPeserta}</strong> pendaftar</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <i className="fas fa-trophy text-[#6B7280]"></i>
+                    {totalJuara === 0 ? (
+                      <span className="text-[#9CA3AF]">Belum ada juara</span>
+                    ) : (
+                      <span><strong className="text-[#1F2937]">{totalJuara}</strong> juara</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Action row */}
+                <div className="flex items-center gap-1.5 -mb-1">
+                  <Link href={`/lomba/${l.id}`} target="_blank" className="icon-action" title="Lihat publik" style={{ width: 36, height: 36 }}>
+                    <i className="fas fa-eye"></i>
+                  </Link>
+                  <Link href={`/admin/peserta/${l.id}`} className="icon-action" title="Peserta" style={{ width: 36, height: 36 }}>
+                    <i className="fas fa-users"></i>
+                  </Link>
+                  <Link href={`/admin/lomba/${l.id}/juara`} className="icon-action" title="Pilih Juara" style={{ width: 36, height: 36 }}>
+                    <i className="fas fa-trophy"></i>
+                  </Link>
+                  <button
+                    onClick={() => { setEditing(l); setCreating(true); }}
+                    className="icon-action"
+                    title="Edit"
+                    style={{ width: 36, height: 36 }}
+                  >
+                    <i className="fas fa-pen"></i>
+                  </button>
+                  <button
+                    onClick={() => deleteLomba(l.id, l.nama)}
+                    disabled={busy === l.id}
+                    className="icon-action reject ml-auto"
+                    title="Hapus"
+                    style={{ width: 36, height: 36 }}
+                  >
+                    <i className="fas fa-trash"></i>
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
 
       {creating && (
         <LombaModal
