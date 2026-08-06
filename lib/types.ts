@@ -27,6 +27,9 @@ export type LombaSlim = {
   kategoriEligible: string[];
   // Optional: only present when the page also passes pendaftar counts
   count?: number;
+  // Whether public registration is open. Always present from server.
+  // Admin can toggle off; admin input-manual always works regardless.
+  pendaftaranDibuka?: boolean;
   // Per-kategori execution date (jadwal). Server-side loaded from
   // `lomba_jadwal` table via loadJadwalBulk. Absent key = no jadwal set.
   jadwalByKategori?: Record<string, {

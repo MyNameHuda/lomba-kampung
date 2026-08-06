@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import KatTag from "@/components/kat-tag";
 import { KAT_ICON, DEFAULT_KAT_ICON } from "@/lib/constants";
-import { formatTanggalLomba } from "@/lib/format";
+import { formatTanggalLomba, lombaTimeStatus } from "@/lib/format";
 import type { LombaSlim as Lomba, KategoriSlim as Kat } from "@/lib/types";
 
 export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; kategori: Kat[] }) {
@@ -120,7 +120,33 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
             <div className="lomba-card">
               <div className="lomba-icon">{l.emoji}</div>
               <div className="lomba-info flex flex-col gap-2">
-                <h3>{l.nama}</h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="flex-1 min-w-0">{l.nama}</h3>
+                  {(() => {
+                    const ts = lombaTimeStatus(l.jadwalByKategori, l.kategoriEligible);
+                    const cfg: Record<string, { label: string; bg: string; fg: string }> = {
+                      "akan-datang": { label: "Akan Datang", bg: "#8B5CF6", fg: "#FFFFFF" },
+                      "sedang-berlangsung": { label: "Berlangsung", bg: "#FBBF24", fg: "#92400E" },
+                      "lewat-jadwal": { label: "Lewat", bg: "#6B7280", fg: "#FFFFFF" },
+                      "belum-dijadwalkan": { label: "", bg: "", fg: "" },
+                    };
+                    const c = cfg[ts];
+                    if (!c || !c.label) return null;
+                    return (
+                      <span
+                        className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
+                        style={{ background: c.bg, color: c.fg }}
+                      >
+                        {c.label}
+                      </span>
+                    );
+                  })()}
+                  {l.pendaftaranDibuka === false && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FEE2E2] text-[#991B1B] whitespace-nowrap">
+                      <i className="fas fa-lock"></i> Ditutup
+                    </span>
+                  )}
+                </div>
                 {l.deskripsi && <p className="text-[11px] text-[#6B7280] line-clamp-2 leading-relaxed">{l.deskripsi}</p>}
                 <div className="flex flex-col gap-1.5">
                   {eligibleKats.map((k) => {

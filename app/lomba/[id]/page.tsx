@@ -10,21 +10,23 @@ import {
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getInitials } from "@/lib/format";
-import { formatTanggalLomba } from "@/lib/format";
+import { formatTanggalLomba, lombaTimeStatus, type LombaTimeStatus } from "@/lib/format";
 import { SECTION_ICON } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// Public-facing status derived from lomba.status + lomba.phase + Juara readiness.
-// 6 variants (was 4 in v2 — added kualifikasi and final).
+// Public-facing status derived from lomba.status + lomba.phase + Juara readiness
+// + per-kategori tanggal (time-based). 8 variants for warga.
 type PublicStatus =
   | "coming-soon"   // draft
-  | "berlangsung"   // aktif + phase=NULL (legacy)
+  | "berlangsung"   // aktif + phase=NULL OR time=today
   | "kualifikasi"   // aktif + phase='kualifikasi' (picking finalists)
   | "final"         // aktif + phase='final' (picking Juara 1/2/3, partial)
   | "juara-terpilih"// allReady Juara (akhirnya atau sebelum Selesaikan)
-  | "selesai";      // status='selesai'
+  | "selesai"       // admin marked Selesai
+  | "akan-datang"   // time=future (tanggal belum tiba)
+  | "lewat-jadwal"; // time=past (semua tanggal udah lewat, admin belum Selesai)
 
 export default async function LombaDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -55,8 +57,10 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
 
   const totalPeserta = groups.sections.reduce((sum, s) => sum + s.peserta.length, 0);
 
-  // Public-facing status badge. v4: phase is derived from per-kategori Tutup state.
-  //   - selesai > juara-terpilih > final > kualifikasi > berlangsung > coming-soon
+  // Public-facing status badge. v4: phase + time-based status.
+  // Time-based (akan-datang / sedang-berlangsung / lewat-jadwal) wins when
+  // lomba.status = "aktif" so warga get a calendar-aware "what's happening
+  // now" view. Admin clicks Selesai → status pins to "selesai".
   const totalJuara = Object.values(juaraMap).reduce((sum, arr) => sum + arr.length, 0);
   // Derive global phase from per-kategori tutup state
   const eligibleKategori = Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [];
@@ -66,6 +70,11 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
   const hasPendaftar = totalPeserta > 0;
   // v4: Juara 1+2 readiness
   const showJuaraTerpilih = readiness.allReady && totalJuara > 0;
+  // Time-based status (only when lomba is active/draft, not Selesai)
+  const timeStatus: LombaTimeStatus =
+    l.status === "aktif"
+      ? lombaTimeStatus(l.jadwalByKategori, eligibleKategori)
+      : "belum-dijadwalkan";
   const publicStatus: PublicStatus =
     l.status === "selesai"
       ? "selesai"
@@ -77,7 +86,7 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
       ? "final"  // some kategori in final phase
       : hasPendaftar && eligibleKategori.length > 0
       ? "kualifikasi"
-      : "berlangsung"; // no eligibleKategori OR no pendaftar yet
+      : "berlangsung"; // fallback
 
   // Finalis名单 — for each eligible kategori, collect finalists (is_finalist = 1).
   const finalisByKategori: Record<string, Array<{
@@ -347,12 +356,20 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
         </div>
       </main>
 
-      {/* CTA — only show for aktif lomba (not selesai) */}
-      {l.status === "aktif" && (
+      {/* CTA — only for aktif lomba, and only when admin hasn't closed registration */}
+      {l.status === "aktif" && l.pendaftaranDibuka && (
         <div className="sticky-cta">
           <Link href={`/lomba/${l.id}/daftar`} className="btn btn-primary btn-block">
             <i className="fas fa-pen-to-square"></i> Daftar Sekarang
           </Link>
+        </div>
+      )}
+      {/* Show "Pendaftaran Ditutup" notice instead of CTA when admin closed it */}
+      {l.status === "aktif" && !l.pendaftaranDibuka && (
+        <div className="sticky-cta">
+          <div className="bg-[#FEE2E2] text-[#991B1B] rounded-xl p-3 text-center text-[13px] font-semibold flex items-center justify-center gap-2">
+            <i className="fas fa-lock"></i> Pendaftaran Ditutup oleh Panitia
+          </div>
         </div>
       )}
     </div>
@@ -369,6 +386,8 @@ function PublicStatusBadge({ status }: { status: PublicStatus }) {
     "final": { label: "Tahap Final", icon: "fa-star", className: "bg-[#F97316] text-white" },
     "juara-terpilih": { label: "Juara Terpilih!", icon: "fa-trophy", className: "bg-[#3B82F6] text-white" },
     "selesai": { label: "Selesai", icon: "fa-check-circle", className: "bg-[#22C55E] text-white" },
+    "akan-datang": { label: "Akan Datang", icon: "fa-calendar-plus", className: "bg-[#8B5CF6] text-white" },
+    "lewat-jadwal": { label: "Lewat Jadwal", icon: "fa-calendar-xmark", className: "bg-[#6B7280] text-white" },
   };
   const c = config[status];
   return (
