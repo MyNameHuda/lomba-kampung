@@ -48,7 +48,7 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
   const isFiltered = search.trim() !== "" || activeKat !== null;
 
   return (
-    <main className="app-content max-w-[1100px] mx-auto">
+    <main className="app-content w-full lg:max-w-[1100px] mx-auto">
       {/* ====== Search bar (full-width on mobile, capped on desktop) ====== */}
       <div className="relative mb-3">
         <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF] text-sm"></i>

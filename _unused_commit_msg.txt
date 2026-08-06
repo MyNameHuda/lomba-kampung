@@ -1,0 +1,41 @@
+fix(public): block page-level horizontal scroll on mobile
+
+User reported the home page was horizontally scrolled on mobile/tablet,
+with content like "Daftar Lomba Kp. Kadu" cut off on the LEFT side
+(only "Kadu" visible). Page was wider than viewport.
+
+**Root cause:**
+The chip strip on the home page uses:
+- `-mx-4 px-4` to bleed to viewport edges
+- `min-w-max` on inner div for natural chip width
+- `overflow-x: auto` on the outer for internal scroll
+
+In some browser/viewport combinations, the `min-w-max` inner
+div can push the outer's effective width beyond the app-content
+boundary, which then pushes the body to scroll horizontally.
+
+The `overflow-x: auto` on the chip outer is supposed to contain
+this, but on certain tablet widths (around 768-900px), the
+auto scroll context doesn't fully prevent the body from
+scrolling.
+
+**Fix (globals.css):**
+
+1. Added `overflow-x: hidden` to `.mobile-page`:
+   Prevents the body from scrolling horizontally regardless of
+   what child tries to overflow. Chip strip's own `overflow-x: auto`
+   still works (it creates its own scroll context within the
+   hidden parent).
+
+2. Added `overflow-x: hidden` to `.app-content`:
+   Belt-and-suspenders — the app-content is where the search bar,
+   filter chips, and card grid live. Clipping here catches any
+   future overflow.
+
+3. Did NOT add `overflow-x: hidden` to body:
+   The sticky app-header has a box-shadow that extends below it.
+   Body-level `overflow: hidden` would clip the shadow, making
+   the header look flat. Keeping it on mobile-page (which is BELOW
+   the header) preserves the shadow.
+
+**No JSX or layout changes.** Pure CSS defensive fix.
