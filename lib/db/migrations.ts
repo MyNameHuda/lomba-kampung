@@ -117,3 +117,21 @@ export async function ensurePjMultiSupport(): Promise<void> {
     "write"
   );
 }
+
+// Self-healing: ensure lomba_jadwal table exists (per-kategori execution date).
+// Idempotent — safe to call on every DB access. Uses `client.execute()` for
+// DDL since CREATE TABLE IF NOT EXISTS is single-statement and reliable.
+export async function ensureLombaJadwalTable(): Promise<void> {
+  await getClient().execute({
+    sql: `CREATE TABLE IF NOT EXISTS lomba_jadwal (
+      lomba_id INTEGER NOT NULL,
+      kategori_id TEXT NOT NULL,
+      tanggal INTEGER,
+      jam TEXT,
+      PRIMARY KEY (lomba_id, kategori_id),
+      FOREIGN KEY (lomba_id) REFERENCES lomba(id) ON DELETE CASCADE,
+      FOREIGN KEY (kategori_id) REFERENCES kategori(id) ON DELETE CASCADE
+    )`,
+    args: [],
+  });
+}

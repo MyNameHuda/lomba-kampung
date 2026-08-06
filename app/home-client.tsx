@@ -123,12 +123,32 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
               colorBorder={k!.colorBorder}
             />
           ));
+        // Show jadwal: pick the earliest tanggal across kategori, or render a
+        // single "Berbagai tanggal" hint if multiple distinct dates.
+        const jadwals = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
+          .map((kid) => l.jadwalByKategori?.[kid])
+          .filter((j): j is NonNullable<typeof j> => !!j && j.tanggal != null);
+        const uniqueDates = Array.from(new Set(jadwals.map((j) => j.tanggal))).sort((a, b) => (a as number) - (b as number));
+        const dateFmt = (ts: number) =>
+          new Date(ts * 1000).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+        const jadwalLabel =
+          uniqueDates.length === 0
+            ? null
+            : uniqueDates.length === 1
+            ? dateFmt(uniqueDates[0] as number)
+            : `${dateFmt(uniqueDates[0] as number)} – ${dateFmt(uniqueDates[uniqueDates.length - 1] as number)}`;
         return (
           <Link key={l.id} href={`/lomba/${l.id}`} className="block no-underline text-inherit">
             <div className="lomba-card">
               <div className="lomba-icon">{l.emoji}</div>
               <div className="lomba-info flex flex-col gap-2">
                 <h3>{l.nama}</h3>
+                {jadwalLabel && (
+                  <div className="text-[11px] text-[#6B7280] flex items-center gap-1.5">
+                    <i className="far fa-calendar text-primary"></i>
+                    <span className="font-semibold text-[#1F2937]">{jadwalLabel}</span>
+                  </div>
+                )}
                 {l.deskripsi && <p className="text-[11px] text-[#6B7280] line-clamp-2 leading-relaxed">{l.deskripsi}</p>}
                 <div className="flex flex-wrap gap-1.5">{tags}</div>
                 <div className="text-[11px] text-[#6B7280]">

@@ -30,15 +30,30 @@ export async function GET() {
     { header: "Status", key: "status", width: 10 },
     { header: "Urutan", key: "urutan", width: 8 },
     { header: "Kategori Eligible", key: "kategoriEligible", width: 30 },
+    { header: "Jadwal", key: "jadwal", width: 36 },
     { header: "Syarat", key: "syarat", width: 30 },
     { header: "PJ per Kategori", key: "pj", width: 50 },
   ];
+  const dateFmtExcel = (ts: number) =>
+    new Date(ts * 1000).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
   for (const l of lombaList) {
     const pjLines = Object.entries(l.pjByKategori || {}).map(([katId, pjList]) => {
       const kat = katMap.get(katId);
       const names = (pjList || []).map((p) => (p.kontak ? `${p.nama} (${p.kontak})` : p.nama)).join(", ");
       return `${kat?.nama || katId}: ${names}`;
     });
+    // Format jadwal: "Kat: 17 Agt 2026 14:00 | Kat2: 18 Agt 2026"
+    // If no jadwal set, leave empty.
+    const jadwalLines = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
+      .map((kid) => {
+        const j = l.jadwalByKategori?.[kid];
+        if (!j || (j.tanggal == null && !j.jam)) return null;
+        const kat = katMap.get(kid);
+        const date = j.tanggal != null ? dateFmtExcel(j.tanggal as number) : "(belum ada tanggal)";
+        const jam = j.jam ? ` ${j.jam}` : "";
+        return `${kat?.nama || kid}: ${date}${jam}`;
+      })
+      .filter(Boolean);
     wsLomba.addRow({
       id: l.id,
       nama: l.nama,
@@ -50,6 +65,7 @@ export async function GET() {
         .map((k) => katMap.get(k)?.nama)
         .filter(Boolean)
         .join("; "),
+      jadwal: jadwalLines.join(" | ") || "",
       syarat: (l.syarat || []).join("; "),
       pj: pjLines.join(" | ") || "—",
     });

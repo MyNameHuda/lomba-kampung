@@ -22,7 +22,7 @@ export type {
 } from "./types";
 
 // Migrations (idempotent — safe to call repeatedly)
-export { ensureKategoriColorColumns, ensurePjMultiSupport, ensureJuaraColumn, ensureKualifikasiColumns, ensureKualifikasiV4Columns } from "./migrations";
+export { ensureKategoriColorColumns, ensurePjMultiSupport, ensureJuaraColumn, ensureKualifikasiColumns, ensureKualifikasiV4Columns, ensureLombaJadwalTable } from "./migrations";
 
 // Settings
 export { getSettings, updateSettings, updateAdminPassword } from "./settings";
@@ -44,7 +44,10 @@ export {
   tutupKualifikasiKategori,
   bukaKualifikasiKategori,
   parseLombaKategoriTutup,
+  loadJadwalBulk,
+  setLombaJadwal,
   type JuaraReadiness,
+  type JadwalEntry,
 } from "./lomba";
 
 // Pendaftar

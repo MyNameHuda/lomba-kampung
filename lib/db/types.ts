@@ -67,6 +67,14 @@ export type Lomba = {
   // Keyed by kategoriId. null/absent = kualifikasi ongoing; non-null = Tutup
   // timestamp. Populated by `attachKategoriTutup` in lib/db/lomba.ts.
   kategoriTutupAt: Record<string, number | null>;
+  // Jadwal pelaksanaan (per-kategori execution date). Populated by
+  // `attachJadwal` in lib/db/lomba.ts from `lomba_jadwal` table.
+  // Absent key = no jadwal set for that kategori.
+  jadwalByKategori: Record<string, {
+    kategoriId: string;
+    tanggal: number | null;
+    jam: string | null;
+  }>;
 };
 
 export type LombaKategoriInput = {
@@ -107,6 +115,16 @@ export type Pendaftar = {
 // libSQL HTTP schema-cache race that made updates intermittently fail on
 // some Lambda instances. We now store this state as a JSON object in
 // lomba.phase instead — see Lomba.phase above for the rationale.
+
+// Jadwal pelaksanaan (execution schedule) per (lomba, kategori).
+// Stored in `lomba_jadwal` table — composite PK (lomba_id, kategori_id).
+// Tanggal is unix seconds (start of day in app's timezone). jam is HH:MM string.
+export type JadwalPelaksanaan = {
+  lombaId: number;
+  kategoriId: string;
+  tanggal: number | null; // unix seconds, start of day
+  jam: string | null;      // "HH:MM" or null
+};
 
 // Public display grouping (Balita / Anak L / Anak P / Dewasa) — derived
 // from master `kategori` table (single source of truth). Range and title

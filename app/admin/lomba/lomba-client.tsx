@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useNotify } from "@/components/notify-provider";
 import KatTag from "@/components/kat-tag";
-import LombaModal, { type LombaFormData } from "./lomba-modal";
+import LombaModal, { type LombaFormData, type JadwalInput } from "./lomba-modal";
 import type { Pj, PjInput, KategoriSlim as Kat } from "@/lib/types";
 
 // Lomba row shape (server-rendered + PJ populated).
@@ -14,6 +14,7 @@ import type { Pj, PjInput, KategoriSlim as Kat } from "@/lib/types";
 type Lomba = LombaFormData & {
   id: number;
   pjByKategori: Record<string, Pj[]>;
+  jadwalByKategori: Record<string, JadwalInput>;
 };
 
 export default function LombaClient({
@@ -40,7 +41,7 @@ export default function LombaClient({
     setItems(initial);
   }, [initial]);
 
-  async function saveLomba(data: LombaFormData & { pjList: PjInput[] }) {
+  async function saveLomba(data: LombaFormData & { pjList: PjInput[]; jadwalList: JadwalInput[] }) {
     setError("");
     try {
       const url = data.id ? `/api/admin/lomba/${data.id}` : "/api/admin/lomba";
@@ -61,7 +62,9 @@ export default function LombaClient({
         pjMap[p.kategoriId].push({ nama: p.pjNama, kontak: p.pjKontak });
       }
       if (data.id) {
-        setItems((prev) => prev.map((l) => (l.id === data.id ? { ...l, ...data, id: data.id, pjByKategori: pjMap } as Lomba : l)));
+        const jadwalMap: Record<string, JadwalInput> = {};
+        for (const j of data.jadwalList) jadwalMap[j.kategoriId] = j;
+        setItems((prev) => prev.map((l) => (l.id === data.id ? { ...l, ...data, id: data.id, pjByKategori: pjMap, jadwalByKategori: jadwalMap } as Lomba : l)));
       } else {
         const tempId = -Math.floor(Math.random() * 1e6);
         const newLocal: Lomba = {
@@ -75,6 +78,7 @@ export default function LombaClient({
           urutan: data.urutan,
           finalisCount: data.finalisCount,
           pjByKategori: pjMap,
+          jadwalByKategori: {},
         };
         setItems((prev) => [...prev, newLocal]);
       }

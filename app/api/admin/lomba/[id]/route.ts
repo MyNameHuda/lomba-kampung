@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { updateLomba, deleteLomba, getLombaById, setLombaKategori } from "@/lib/db";
+import { updateLomba, deleteLomba, getLombaById, setLombaKategori, setLombaJadwal } from "@/lib/db";
 import { isAuthenticated } from "@/lib/auth";
 import { z } from "zod";
 
@@ -10,6 +10,12 @@ const pjSchema = z.object({
   pjKontak: z.string().max(50).nullable().optional(),
 });
 
+const jadwalSchema = z.object({
+  kategoriId: z.string().min(1),
+  tanggal: z.number().int().nullable().optional(),
+  jam: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+});
+
 const lombaSchema = z.object({
   nama: z.string().min(2).max(100).optional(),
   emoji: z.string().min(1).max(8).optional(),
@@ -17,6 +23,8 @@ const lombaSchema = z.object({
   syarat: z.array(z.string().min(1).max(200)).max(20).optional(),
   kategoriEligible: z.array(z.string().min(1)).min(1).max(10).optional(),
   pjList: z.array(pjSchema).min(1).max(30).optional(),
+  // Jadwal pelaksanaan per (lomba, kategori). Empty array = clear all jadwal.
+  jadwalList: z.array(jadwalSchema).max(10).optional(),
   status: z.enum(["draft", "aktif", "selesai"]).optional(),
   urutan: z.number().int().min(0).optional(),
   // v4: finalisCount removed from active use. Kept optional for back-compat
@@ -72,13 +80,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     // Separate pjList from lomba fields
-    const { pjList, ...lombaFields } = data;
+    const { pjList, jadwalList, ...lombaFields } = data;
     await updateLomba(idNum, lombaFields);
     if (pjList) {
       await setLombaKategori(idNum, pjList.map((p) => ({
         kategoriId: p.kategoriId,
         pjNama: p.pjNama,
         pjKontak: p.pjKontak ?? null,
+      })));
+    }
+    if (jadwalList) {
+      await setLombaJadwal(idNum, jadwalList.map((j) => ({
+        kategoriId: j.kategoriId,
+        tanggal: j.tanggal ?? null,
+        jam: j.jam ?? null,
       })));
     }
     revalidatePath("/admin");

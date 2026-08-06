@@ -128,10 +128,12 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
         </Link>
         <span className="text-6xl block mb-3">{l.emoji}</span>
         <h1 className="text-[22px] font-extrabold mb-1">{l.nama}</h1>
-        <span className="inline-block bg-white/20 px-3 py-1 rounded-full text-[11px] font-semibold mb-2">
-          {l.kategoriEligible.map((k) => katMap.get(k)?.nama).filter(Boolean).join(" · ")}
-        </span>
-        <PublicStatusBadge status={publicStatus} />
+        <div className="flex flex-col items-center gap-3 mb-2">
+          <span className="inline-block bg-white/20 px-3 py-1 rounded-full text-[11px] font-semibold">
+            {l.kategoriEligible.map((k) => katMap.get(k)?.nama).filter(Boolean).join(" · ")}
+          </span>
+          <PublicStatusBadge status={publicStatus} />
+        </div>
       </div>
 
       <main className="app-content">
@@ -148,6 +150,43 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
               </li>
             ))}
           </ul>
+        </div>
+
+        <div className="info-section">
+          <h3 className="text-[13px] font-bold mb-3 text-[#1F2937] flex items-center gap-2">
+            <i className="far fa-calendar text-primary"></i> Jadwal Pelaksanaan
+          </h3>
+          {(() => {
+            const jadwals = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
+              .map((kid) => ({ kid, jadwal: l.jadwalByKategori?.[kid] }))
+              .filter((x) => x.jadwal && (x.jadwal.tanggal != null || x.jadwal.jam != null));
+            if (jadwals.length === 0) {
+              return <div className="text-center py-3 text-[#6B7280] text-sm">Belum ada jadwal yang diumumkan</div>;
+            }
+            const dateFmt = (ts: number) =>
+              new Date(ts * 1000).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+            return (
+              <div className="space-y-2.5 mt-2">
+                {jadwals.map(({ kid, jadwal }) => {
+                  const kat = katMap.get(kid);
+                  return (
+                    <div key={kid} className="flex items-center gap-3 p-3 bg-[#F9FAFB] rounded-lg">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent text-white flex items-center justify-center flex-shrink-0">
+                        <i className="far fa-calendar text-base"></i>
+                      </div>
+                      <div className="flex-1 min-w-0 flex flex-col gap-0.5 leading-snug">
+                        {kat && <div className="text-[10px] font-bold text-primary uppercase tracking-wide">{kat.nama}</div>}
+                        {jadwal!.tanggal != null && (
+                          <div className="font-semibold text-[13px]">{dateFmt(jadwal!.tanggal as number)}</div>
+                        )}
+                        {jadwal!.jam && <div className="text-[11px] text-[#6B7280]">Pukul {jadwal!.jam} WIB</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
 
         <div className="info-section">

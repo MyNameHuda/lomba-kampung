@@ -3,7 +3,7 @@
 // enabled via the (lomba_id, kategori_id, urutan) composite PK — see migrations.ts).
 import { all, get, getClient, run, type DbRow } from "./client";
 import { toCamel, toCamelAll } from "./internal";
-import { ensurePjMultiSupport, ensureKualifikasiColumns, ensureKualifikasiV4Columns } from "./migrations";
+import { ensurePjMultiSupport, ensureKualifikasiColumns, ensureKualifikasiV4Columns, ensureLombaJadwalTable } from "./migrations";
 import type { Lomba, LombaKategoriInput, Pj } from "./types";
 
 // Load pjByKategori for many lomba at once (avoid N+1).
@@ -80,6 +80,13 @@ function attachKategoriTutup<T extends { id: number }>(
   return { ...row, kategoriTutupAt: tutupBulk.get(row.id) || {} };
 }
 
+function attachJadwal<T extends { id: number }>(
+  row: T,
+  jadwalBulk: Map<number, Record<string, JadwalEntry>>
+): T & { jadwalByKategori: Record<string, JadwalEntry> } {
+  return { ...row, jadwalByKategori: jadwalBulk.get(row.id) || {} };
+}
+
 // =================== Read ===================
 export async function getLomba(includeInactive = false): Promise<Lomba[]> {
   await ensureKualifikasiColumns();
@@ -87,16 +94,16 @@ export async function getLomba(includeInactive = false): Promise<Lomba[]> {
     ? "SELECT * FROM lomba ORDER BY urutan"
     : "SELECT * FROM lomba WHERE status = 'aktif' ORDER BY urutan";
   const rows = toCamelAll<Lomba>(await all<DbRow>(sql));
-  const [pjBulk, tutupBulk] = await Promise.all([loadPjBulk(), loadKategoriTutupBulk()]);
-  return rows.map((r) => attachKategoriTutup(attachPj(r, pjBulk), tutupBulk));
+  const [pjBulk, tutupBulk, jadwalBulk] = await Promise.all([loadPjBulk(), loadKategoriTutupBulk(), loadJadwalBulk()]);
+  return rows.map((r) => attachJadwal(attachKategoriTutup(attachPj(r, pjBulk), tutupBulk), jadwalBulk));
 }
 
 export async function getLombaById(id: number): Promise<Lomba | null> {
   await ensureKualifikasiColumns();
   const row = toCamel<Lomba>(await get<DbRow>("SELECT * FROM lomba WHERE id = ?", id));
   if (!row) return null;
-  const [pjBulk, tutupBulk] = await Promise.all([loadPjBulk(), loadKategoriTutupBulk()]);
-  return attachKategoriTutup(attachPj(row, pjBulk), tutupBulk);
+  const [pjBulk, tutupBulk, jadwalBulk] = await Promise.all([loadPjBulk(), loadKategoriTutupBulk(), loadJadwalBulk()]);
+  return attachJadwal(attachKategoriTutup(attachPj(row, pjBulk), tutupBulk), jadwalBulk);
 }
 
 export async function getLombaWithCount(): Promise<{ id: number; nama: string; emoji: string; count: number; pjByKategori: Record<string, Pj[]> }[]> {
@@ -119,9 +126,10 @@ export async function getLombaWithCount(): Promise<{ id: number; nama: string; e
 }
 
 // =================== Write ===================
-// Input excludes DB-managed fields (id, createdAt, pjByKategori, kategoriTutupAt
-// — the latter is auto-derived via loadKategoriTutupBulk on read).
-export async function createLomba(data: Omit<Lomba, "id" | "createdAt" | "pjByKategori" | "kategoriTutupAt">): Promise<number> {
+// Input excludes DB-managed fields (id, createdAt, pjByKategori, kategoriTutupAt,
+// jadwalByKategori — the last three are auto-derived via loadPjBulk / loadKategoriTutupBulk
+// / loadJadwalBulk on read).
+export async function createLomba(data: Omit<Lomba, "id" | "createdAt" | "pjByKategori" | "kategoriTutupAt" | "jadwalByKategori">): Promise<number> {
   await ensureKualifikasiColumns();
   const result = await run(
     `INSERT INTO lomba (nama, emoji, deskripsi, syarat, kategori_eligible, status, urutan, finalis_count, phase)
@@ -161,7 +169,7 @@ export async function setLombaKategori(lombaId: number, list: LombaKategoriInput
   }
 }
 
-export async function updateLomba(id: number, updates: Partial<Omit<Lomba, "id" | "createdAt" | "pjByKategori" | "kategoriTutupAt" | "phase">>): Promise<void> {
+export async function updateLomba(id: number, updates: Partial<Omit<Lomba, "id" | "createdAt" | "pjByKategori" | "kategoriTutupAt" | "phase" | "jadwalByKategori">>): Promise<void> {
   // Note: `phase` is intentionally NOT updatable via this function. It holds
   // a JSON object (per-kategori Tutup state) that should only be written via
   // `tutupKualifikasiKategori` / `bukaKualifikasiKategori`. Letting callers
@@ -321,4 +329,69 @@ export async function bukaKualifikasiKategori(
     lombaId
   );
   return true;
+}
+
+// =================== Jadwal Pelaksanaan (per-kategori) ===================
+// Per-(lomba, kategori) execution date. Stored in `lomba_jadwal` table
+// (composite PK lomba_id + kategori_id). Tanggal is unix seconds (start
+// of day). jam is optional "HH:MM" string.
+//
+// Note: one row per (lomba, kategori) — multi-PJ per kategori share the
+// same jadwal. We chose a separate table (instead of adding columns to
+// `lomba_kategori`) because the latter has multiple rows per (lomba,
+// kategori) for multi-PJ support, and tanggal is per-kategori (not per-PJ).
+
+/** Shape per-kategori jadwal entry. */
+export type JadwalEntry = {
+  kategoriId: string;
+  tanggal: number | null; // unix seconds, start of day
+  jam: string | null;     // "HH:MM" or null
+};
+
+/**
+ * Load jadwal for many lomba at once (avoid N+1).
+ * Returns Map<lombaId, Record<kategoriId, JadwalEntry>>. Absent key = no jadwal set.
+ */
+export async function loadJadwalBulk(): Promise<Map<number, Record<string, JadwalEntry>>> {
+  await ensureLombaJadwalTable();
+  try {
+    const rows = await all<{ lomba_id: number; kategori_id: string; tanggal: number | null; jam: string | null }>(
+      "SELECT lomba_id, kategori_id, tanggal, jam FROM lomba_jadwal WHERE tanggal IS NOT NULL OR jam IS NOT NULL"
+    );
+    const map = new Map<number, Record<string, JadwalEntry>>();
+    for (const r of rows) {
+      let inner = map.get(r.lomba_id);
+      if (!inner) { inner = {}; map.set(r.lomba_id, inner); }
+      inner[r.kategori_id] = {
+        kategoriId: r.kategori_id,
+        tanggal: r.tanggal,
+        jam: r.jam,
+      };
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+/**
+ * Replace the jadwal for a single lomba. Deletes all existing rows for
+ * this lomba, then inserts the new list. Use UPSERT (INSERT OR REPLACE)
+ * per row to keep it atomic and idempotent on retry.
+ *
+ * If `list` is empty, just deletes all rows for this lomba.
+ */
+export async function setLombaJadwal(lombaId: number, list: JadwalEntry[]): Promise<void> {
+  await ensureLombaJadwalTable();
+  await run("DELETE FROM lomba_jadwal WHERE lomba_id = ?", lombaId);
+  for (const j of list) {
+    if (j.tanggal === null && j.jam === null) continue; // skip empty entries
+    await run(
+      "INSERT INTO lomba_jadwal (lomba_id, kategori_id, tanggal, jam) VALUES (?, ?, ?, ?)",
+      lombaId,
+      j.kategoriId,
+      j.tanggal,
+      j.jam
+    );
+  }
 }

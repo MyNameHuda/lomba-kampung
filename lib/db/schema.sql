@@ -63,6 +63,19 @@ CREATE TABLE IF NOT EXISTS lomba_kategori (
 CREATE INDEX IF NOT EXISTS idx_lomba_kategori_lomba ON lomba_kategori(lomba_id);
 CREATE INDEX IF NOT EXISTS idx_lomba_kategori_kat ON lomba_kategori(kategori_id);
 
+-- Per-(lomba, kategori) execution date. One row per eligible combo. NULL tanggal
+-- means "belum dijadwalkan". Tanggal is unix seconds (start of day in app's TZ).
+-- Multi-PJ per kategori share the same date (because this is per-kategori, not per-PJ).
+CREATE TABLE IF NOT EXISTS lomba_jadwal (
+  lomba_id INTEGER NOT NULL,
+  kategori_id TEXT NOT NULL,
+  tanggal INTEGER,
+  jam TEXT,
+  PRIMARY KEY (lomba_id, kategori_id),
+  FOREIGN KEY (lomba_id) REFERENCES lomba(id) ON DELETE CASCADE,
+  FOREIGN KEY (kategori_id) REFERENCES kategori(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS pendaftar (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   nomor TEXT NOT NULL,

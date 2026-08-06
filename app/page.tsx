@@ -30,6 +30,7 @@ export default async function PublicHome() {
     deskripsi: l.deskripsi,
     kategoriEligible: Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [],
     count: countByLomba.get(l.id) ?? 0,
+    jadwalByKategori: l.jadwalByKategori || {},
   }));
 
   return (

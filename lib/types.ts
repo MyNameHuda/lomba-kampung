@@ -27,6 +27,13 @@ export type LombaSlim = {
   kategoriEligible: string[];
   // Optional: only present when the page also passes pendaftar counts
   count?: number;
+  // Per-kategori execution date (jadwal). Server-side loaded from
+  // `lomba_jadwal` table via loadJadwalBulk. Absent key = no jadwal set.
+  jadwalByKategori?: Record<string, {
+    kategoriId: string;
+    tanggal: number | null;
+    jam: string | null;
+  }>;
 };
 
 export type PesertaSlim = {

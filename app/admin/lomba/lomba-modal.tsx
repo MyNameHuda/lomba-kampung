@@ -4,6 +4,13 @@ import { useState } from "react";
 import { APP_CONFIG } from "@/lib/constants";
 import type { Pj, PjInput, KategoriSlim as Kat } from "@/lib/types";
 
+// Jadwal entry — per-kategori execution date + optional jam.
+export type JadwalInput = {
+  kategoriId: string;
+  tanggal: number | null; // unix seconds, start of day
+  jam: string | null;     // "HH:MM" or null
+};
+
 // Form-side lomba shape — omits pjByKategori (we use pjList at the API layer)
 // and other DB-only fields. Kept local since the modal has its own needs.
 export type LombaFormData = {
@@ -18,6 +25,9 @@ export type LombaFormData = {
   // Stage system v3 — kualifikasi config. How many finalists per kategori
   // advance from kualifikasi to final (range 1-50, default 5).
   finalisCount: number;
+  // Per-kategori jadwal (loaded from editing.jadwalByKategori, sent back as
+  // jadwalList on save). Server-side this lives in `lomba_jadwal` table.
+  jadwalByKategori?: Record<string, JadwalInput>;
 };
 
 const EMOJI_OPTIONS = ["🏆", "🍪", "🏃", "🪢", "🌴", "💧", "🎤", "🪑", "🥚", "🎯", "🏐", "🎲", "🎨", "🎭", "📚", "🚌"];
@@ -42,11 +52,11 @@ export default function LombaModal({
   onClose,
   onSave,
 }: {
-  editing: { id: number; pjByKategori: Record<string, Pj[]> } & LombaFormData | null;
+  editing: { id: number; pjByKategori: Record<string, Pj[]>; jadwalByKategori?: Record<string, JadwalInput> } & LombaFormData | null;
   kats: Kat[];
   nextUrutan: number;
   onClose: () => void;
-  onSave: (data: LombaFormData & { pjList: PjInput[] }) => void;
+  onSave: (data: LombaFormData & { pjList: PjInput[]; jadwalList: JadwalInput[] }) => void;
 }) {
   const [nama, setNama] = useState(editing?.nama || "");
   const [emoji, setEmoji] = useState(editing?.emoji || "🏆");
@@ -72,15 +82,30 @@ export default function LombaModal({
   const [status, setStatus] = useState<LombaFormData["status"]>(editing?.status || "aktif");
   const [urutan, setUrutan] = useState(editing?.urutan ?? nextUrutan);
   const [finalisCount, setFinalisCount] = useState<number>(editing?.finalisCount ?? 5);
+  // Per-kategori jadwal (tanggal + jam). Empty Record = no jadwal set.
+  const [jadwalByKategori, setJadwalByKategori] = useState<Record<string, JadwalInput>>(() => {
+    if (!editing?.jadwalByKategori) return {};
+    const out: Record<string, JadwalInput> = {};
+    for (const [k, v] of Object.entries(editing.jadwalByKategori)) {
+      if (v && (v.tanggal !== null || v.jam !== null)) {
+        out[k] = { kategoriId: k, tanggal: v.tanggal ?? null, jam: v.jam ?? null };
+      }
+    }
+    return out;
+  });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
   function toggleKat(id: string) {
     setKategoriEligible((prev) => {
       if (prev.includes(id)) {
-        // Removing — also remove pj list for this kategori
+        // Removing — also remove pj list + jadwal for this kategori
         setPjByKategori((p) => {
           const { [id]: _, ...rest } = p;
+          return rest;
+        });
+        setJadwalByKategori((j) => {
+          const { [id]: _, ...rest } = j;
           return rest;
         });
         return prev.filter((x) => x !== id);
@@ -89,6 +114,32 @@ export default function LombaModal({
         setPjByKategori((p) => ({ ...p, [id]: [{ nama: "", kontak: null }] }));
         return [...prev, id];
       }
+    });
+  }
+
+  function setJadwal(katId: string, field: "tanggal" | "jam", value: string | null) {
+    setJadwalByKategori((prev) => {
+      const cur = prev[katId] || { kategoriId: katId, tanggal: null, jam: null };
+      const next: JadwalInput = { ...cur, kategoriId: katId };
+      if (field === "tanggal") {
+        // value: "YYYY-MM-DD" from <input type="date"> or null when cleared
+        if (!value) next.tanggal = null;
+        else {
+          // Parse YYYY-MM-DD as local start-of-day, store as unix seconds
+          const [y, m, d] = value.split("-").map(Number);
+          if (!y || !m || !d) next.tanggal = null;
+          else next.tanggal = Math.floor(new Date(y, m - 1, d, 0, 0, 0).getTime() / 1000);
+        }
+      } else {
+        // value: "HH:MM" or null
+        next.jam = value || null;
+      }
+      // Drop entry if both null
+      if (next.tanggal === null && next.jam === null) {
+        const { [katId]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [katId]: next };
     });
   }
 
@@ -158,6 +209,14 @@ export default function LombaModal({
           });
         }
       }
+      // Build jadwalList — only kategori with a date or jam set
+      const jadwalList: JadwalInput[] = [];
+      for (const katId of kategoriEligible) {
+        const j = jadwalByKategori[katId];
+        if (j && (j.tanggal !== null || j.jam !== null)) {
+          jadwalList.push(j);
+        }
+      }
       await onSave({
         id: editing?.id,
         nama: nama.trim(),
@@ -166,6 +225,7 @@ export default function LombaModal({
         syarat: syarat.split("\n").map((s) => s.trim()).filter(Boolean),
         kategoriEligible,
         pjList,
+        jadwalList,
         status,
         urutan,
         finalisCount,
@@ -240,11 +300,36 @@ export default function LombaModal({
                 {kategoriEligible.map((katId) => {
                   const kat = kats.find((k) => k.id === katId);
                   const list = pjByKategori[katId] || [];
+                  const jadwal = jadwalByKategori[katId];
+                  // Convert unix seconds to YYYY-MM-DD for <input type="date">
+                  const tanggalStr = jadwal?.tanggal
+                    ? new Date(jadwal.tanggal * 1000).toISOString().slice(0, 10)
+                    : "";
                   return (
                     <div key={katId} className="border-2 border-primary-light rounded-lg p-3 bg-white">
                       <div className="text-[11px] font-bold text-primary uppercase tracking-wide mb-2.5 flex items-center justify-between">
                         <span><i className="fas fa-tag"></i> {kat?.nama || katId}</span>
                         <span className="text-[10px] text-[#6B7280] normal-case font-normal">{list.length} PJ</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 mb-2.5 pb-2.5 border-b border-dashed border-[#E5E7EB]">
+                        <div>
+                          <label className="text-[10px] text-[#6B7280] block mb-0.5">Tanggal Pelaksanaan</label>
+                          <input
+                            type="date"
+                            className="input"
+                            value={tanggalStr}
+                            onChange={(e) => setJadwal(katId, "tanggal", e.target.value || null)}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-[#6B7280] block mb-0.5">Jam (opsional)</label>
+                          <input
+                            type="time"
+                            className="input"
+                            value={jadwal?.jam || ""}
+                            onChange={(e) => setJadwal(katId, "jam", e.target.value || null)}
+                          />
+                        </div>
                       </div>
                       <div className="space-y-2">
                         {list.map((pj, idx) => (

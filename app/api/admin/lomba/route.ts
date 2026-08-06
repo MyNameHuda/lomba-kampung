@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { createLomba, getLomba, setLombaKategori } from "@/lib/db";
+import { createLomba, getLomba, setLombaKategori, setLombaJadwal } from "@/lib/db";
 import { isAuthenticated } from "@/lib/auth";
 import { z } from "zod";
 
@@ -8,6 +8,14 @@ const pjSchema = z.object({
   kategoriId: z.string().min(1),
   pjNama: z.string().min(2).max(100),
   pjKontak: z.string().max(50).nullable().optional(),
+});
+
+const jadwalSchema = z.object({
+  kategoriId: z.string().min(1),
+  // Unix seconds (start of day). null = explicitly no date.
+  tanggal: z.number().int().nullable().optional(),
+  // "HH:MM" string. null = no jam specified.
+  jam: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
 });
 
 const lombaSchema = z.object({
@@ -19,6 +27,9 @@ const lombaSchema = z.object({
   // pjList now allows multiple entries per kategori (e.g. 2 PJs for k_balita).
   // Total entries capped at 30 (3 PJs × 10 kategori).
   pjList: z.array(pjSchema).min(1).max(30),
+  // Jadwal pelaksanaan per (lomba, kategori). Optional — admin can set later
+  // via PATCH or leave empty if not yet decided.
+  jadwalList: z.array(jadwalSchema).max(10).optional(),
   status: z.enum(["draft", "aktif", "selesai"]).default("aktif"),
   urutan: z.number().int().min(0).default(0),
   // v4: finalisCount removed — admin decides finalists per-pendaftar (Loloskan/Gugur).
@@ -91,6 +102,13 @@ export async function POST(req: Request) {
       pjNama: p.pjNama,
       pjKontak: p.pjKontak ?? null,
     })));
+    if (data.jadwalList && data.jadwalList.length > 0) {
+      await setLombaJadwal(id, data.jadwalList.map((j) => ({
+        kategoriId: j.kategoriId,
+        tanggal: j.tanggal ?? null,
+        jam: j.jam ?? null,
+      })));
+    }
     revalidatePath("/admin");
     revalidatePath("/admin/lomba");
     revalidatePath("/");
