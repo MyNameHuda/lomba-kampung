@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { APP_CONFIG } from "@/lib/constants";
+import { dateStrToTs, tsToUtcDateStr } from "@/lib/format";
 import type { Pj, PjInput, KategoriSlim as Kat } from "@/lib/types";
 
 // Jadwal entry — per-kategori execution date + optional jam.
@@ -122,14 +123,12 @@ export default function LombaModal({
       const cur = prev[katId] || { kategoriId: katId, tanggal: null, jam: null };
       const next: JadwalInput = { ...cur, kategoriId: katId };
       if (field === "tanggal") {
-        // value: "YYYY-MM-DD" from <input type="date"> or null when cleared
+        // value: "YYYY-MM-DD" from <input type="date"> or null when cleared.
+        // Treat as midnight UTC (calendar day, not moment in viewer's TZ) — see
+        // dateStrToTs in lib/format.ts. This avoids the +1/-1 day off-by-one
+        // bug when the user is in a TZ other than Asia/Jakarta.
         if (!value) next.tanggal = null;
-        else {
-          // Parse YYYY-MM-DD as local start-of-day, store as unix seconds
-          const [y, m, d] = value.split("-").map(Number);
-          if (!y || !m || !d) next.tanggal = null;
-          else next.tanggal = Math.floor(new Date(y, m - 1, d, 0, 0, 0).getTime() / 1000);
-        }
+        else next.tanggal = dateStrToTs(value);
       } else {
         // value: "HH:MM" or null
         next.jam = value || null;
@@ -301,9 +300,11 @@ export default function LombaModal({
                   const kat = kats.find((k) => k.id === katId);
                   const list = pjByKategori[katId] || [];
                   const jadwal = jadwalByKategori[katId];
-                  // Convert unix seconds to YYYY-MM-DD for <input type="date">
+                  // Convert unix seconds (midnight UTC) to YYYY-MM-DD for
+                  // <input type="date">. Stored value is always midnight UTC,
+                  // so toISOString() (also UTC) round-trips cleanly.
                   const tanggalStr = jadwal?.tanggal
-                    ? new Date(jadwal.tanggal * 1000).toISOString().slice(0, 10)
+                    ? tsToUtcDateStr(jadwal.tanggal)
                     : "";
                   return (
                     <div key={katId} className="border-2 border-primary-light rounded-lg p-3 bg-white">

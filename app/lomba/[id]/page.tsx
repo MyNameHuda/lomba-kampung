@@ -10,6 +10,7 @@ import {
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getInitials } from "@/lib/format";
+import { formatTanggalLomba } from "@/lib/format";
 import { SECTION_ICON } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -163,8 +164,6 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
             if (jadwals.length === 0) {
               return <div className="text-center py-3 text-[#6B7280] text-sm">Belum ada jadwal yang diumumkan</div>;
             }
-            const dateFmt = (ts: number) =>
-              new Date(ts * 1000).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
             return (
               <div className="space-y-2.5 mt-2">
                 {jadwals.map(({ kid, jadwal }) => {
@@ -177,7 +176,7 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
                       <div className="flex-1 min-w-0 flex flex-col gap-0.5 leading-snug">
                         {kat && <div className="text-[10px] font-bold text-primary uppercase tracking-wide">{kat.nama}</div>}
                         {jadwal!.tanggal != null && (
-                          <div className="font-semibold text-[13px]">{dateFmt(jadwal!.tanggal as number)}</div>
+                          <div className="font-semibold text-[13px]">{formatTanggalLomba(jadwal!.tanggal as number, "weekday-long")}</div>
                         )}
                         {jadwal!.jam && <div className="text-[11px] text-[#6B7280]">Pukul {jadwal!.jam} WIB</div>}
                       </div>

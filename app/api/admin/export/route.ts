@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { getLomba, getPendaftar, getKategori } from "@/lib/db";
 import { isAuthenticated } from "@/lib/auth";
+import { formatTanggalLomba } from "@/lib/format";
 import type { Pendaftar } from "@/lib/db/types";
 
 export async function GET() {
@@ -34,8 +35,7 @@ export async function GET() {
     { header: "Syarat", key: "syarat", width: 30 },
     { header: "PJ per Kategori", key: "pj", width: 50 },
   ];
-  const dateFmtExcel = (ts: number) =>
-    new Date(ts * 1000).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+  const dateFmtExcel = (ts: number) => formatTanggalLomba(ts, "short");
   for (const l of lombaList) {
     const pjLines = Object.entries(l.pjByKategori || {}).map(([katId, pjList]) => {
       const kat = katMap.get(katId);

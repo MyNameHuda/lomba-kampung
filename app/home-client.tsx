@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import KatTag from "@/components/kat-tag";
 import { KAT_ICON, DEFAULT_KAT_ICON } from "@/lib/constants";
+import { formatTanggalLomba } from "@/lib/format";
 import type { LombaSlim as Lomba, KategoriSlim as Kat } from "@/lib/types";
 
 export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; kategori: Kat[] }) {
@@ -129,14 +130,12 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
           .map((kid) => l.jadwalByKategori?.[kid])
           .filter((j): j is NonNullable<typeof j> => !!j && j.tanggal != null);
         const uniqueDates = Array.from(new Set(jadwals.map((j) => j.tanggal))).sort((a, b) => (a as number) - (b as number));
-        const dateFmt = (ts: number) =>
-          new Date(ts * 1000).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
         const jadwalLabel =
           uniqueDates.length === 0
             ? null
             : uniqueDates.length === 1
-            ? dateFmt(uniqueDates[0] as number)
-            : `${dateFmt(uniqueDates[0] as number)} – ${dateFmt(uniqueDates[uniqueDates.length - 1] as number)}`;
+            ? formatTanggalLomba(uniqueDates[0] as number, "short")
+            : `${formatTanggalLomba(uniqueDates[0] as number, "short")} – ${formatTanggalLomba(uniqueDates[uniqueDates.length - 1] as number, "short")}`;
         return (
           <Link key={l.id} href={`/lomba/${l.id}`} className="block no-underline text-inherit">
             <div className="lomba-card">
