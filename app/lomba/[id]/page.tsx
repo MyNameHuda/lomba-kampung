@@ -166,7 +166,20 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
       </div>
 
       <main className="app-content max-w-[1100px] mx-auto w-full">
-        {l.deskripsi && <p className="text-sm text-[#1F2937] mb-4 px-1 leading-relaxed">{l.deskripsi}</p>}
+        {l.deskripsi && (
+          // Deskripsi callout — visually distinct from white info-sections
+          // (Syarat/Jadwal/PJ). Soft pink gradient + decorative quote icon
+          // + "Tentang Lomba" eyebrow label so warga won't skip it.
+          <div className="relative mb-5 p-4 sm:p-5 rounded-2xl border border-[#FCE0E0] bg-gradient-to-br from-[#FCE0E0]/60 via-[#FDF5F5] to-white shadow-sm overflow-hidden">
+            <i className="fas fa-quote-left absolute top-3 right-4 text-2xl text-primary opacity-20" aria-hidden="true"></i>
+            <div className="text-[10px] font-bold text-primary uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <i className="fas fa-book-open text-[10px]"></i> Tentang Lomba
+            </div>
+            <p className="text-[14px] text-[#1F2937] leading-relaxed break-words relative z-[1]">
+              {l.deskripsi}
+            </p>
+          </div>
+        )}
 
         <div className="detail-2col grid grid-cols-1 lg:grid-cols-2 gap-3.5">
           <div className="space-y-3.5">
