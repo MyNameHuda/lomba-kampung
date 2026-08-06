@@ -18,6 +18,12 @@ out
 /_*.cjs
 /_*.py
 /_unused_backup_*/
+/_unused_*.log
+/_unused_*.txt
+/_scan_*.cjs
+/_test_*.cjs
+/_mobile_*.png
+/_mobile_*.jpg
 
 # E2E tests at repo root. Only test-v4-system.cjs is the canonical
 # test that ships with the repo; all other test-*.cjs are throwaway.

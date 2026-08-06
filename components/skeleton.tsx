@@ -16,10 +16,6 @@ export function SkeletonText({ className = "", width = "w-full" }: SkeletonProps
   return <div className={`skeleton h-3 ${width} ${className}`} aria-hidden="true" />;
 }
 
-export function SkeletonCircle({ className = "" }: SkeletonProps) {
-  return <div className={`skeleton rounded-full ${className}`} aria-hidden="true" />;
-}
-
 export function SkeletonBlock({ className = "" }: SkeletonProps) {
   return <div className={`skeleton ${className}`} aria-hidden="true" />;
 }

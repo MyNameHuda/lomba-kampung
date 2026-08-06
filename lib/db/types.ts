@@ -121,16 +121,6 @@ export type Pendaftar = {
 // some Lambda instances. We now store this state as a JSON object in
 // lomba.phase instead — see Lomba.phase above for the rationale.
 
-// Jadwal pelaksanaan (execution schedule) per (lomba, kategori).
-// Stored in `lomba_jadwal` table — composite PK (lomba_id, kategori_id).
-// Tanggal is unix seconds (start of day in app's timezone). jam is HH:MM string.
-export type JadwalPelaksanaan = {
-  lombaId: number;
-  kategoriId: string;
-  tanggal: number | null; // unix seconds, start of day
-  jam: string | null;      // "HH:MM" or null
-};
-
 // Public display grouping (Balita / Anak L / Anak P / Dewasa) — derived
 // from master `kategori` table (single source of truth). Range and title
 // auto-derived from kategori rows; section assignment based on `min` field.
