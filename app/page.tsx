@@ -17,8 +17,13 @@ export default async function PublicHome() {
   ]);
   const isAdmin = !!session.isAdmin;
 
-  // Pre-compute pendaftar counts per lomba in parallel
-  const counts = await Promise.all(rows.map(async (l) => [l.id, await countPendaftarByLomba(l.id)] as const));
+  // Pre-compute pendaftar counts per lomba in parallel. Only count
+  // approved (status='disetujui') — the home page label says "peserta"
+  // (officially confirmed by admin), not "pendaftar" (which includes
+  // pending review). See `countPendaftarByLomba` in lib/db/pendaftar.ts.
+  const counts = await Promise.all(
+    rows.map(async (l) => [l.id, await countPendaftarByLomba(l.id, "disetujui")] as const)
+  );
   const countByLomba = new Map(counts);
 
   // Flatten lomba + count into the shape the client component needs.

@@ -115,6 +115,9 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
         const eligibleKats = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
           .map((kid) => katMap.get(kid))
           .filter((k): k is NonNullable<typeof k> => !!k);
+        // "peserta" = officially approved (status='disetujui') only. Server
+        // already filters, so l.count is the approved count.
+        const pesertaCount = l.count ?? 0;
         return (
           <Link key={l.id} href={`/lomba/${l.id}`} className="block no-underline text-inherit">
             <div className="lomba-card">
@@ -124,15 +127,15 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
                   <h3 className="flex-1 min-w-0">{l.nama}</h3>
                   {(() => {
                     const ts = lombaTimeStatus(l.jadwalByKategori, l.kategoriEligible);
-                    // No time info + no pendaftar → neutral "Belum Mulai" pill.
-                    // (On the detail page this is a separate "belum-mulai" PublicStatus,
-                    // but on the card we keep it simple — single pill.)
-                    const noPendaftar = (l.count ?? 0) === 0;
+                    // On the card we keep it simple — single pill. "Belum Mulai"
+                    // shows when no jadwal AND no peserta yet (neutral, not
+                    // misleading "Berlangsung" for an inactive lomba).
+                    const noPeserta = pesertaCount === 0;
                     const cfg: Record<string, { label: string; bg: string; fg: string }> = {
                       "akan-datang": { label: "Akan Datang", bg: "#8B5CF6", fg: "#FFFFFF" },
                       "sedang-berlangsung": { label: "Berlangsung", bg: "#FBBF24", fg: "#92400E" },
                       "lewat-jadwal": { label: "Lewat", bg: "#6B7280", fg: "#FFFFFF" },
-                      "belum-dijadwalkan": noPendaftar
+                      "belum-dijadwalkan": noPeserta
                         ? { label: "Belum Mulai", bg: "#E5E7EB", fg: "#374151" }
                         : { label: "Sedang Berlangsung", bg: "#FBBF24", fg: "#92400E" },
                     };
@@ -181,9 +184,19 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
                     );
                   })}
                 </div>
-                <div className="text-[11px] text-[#6B7280]">
-                  <i className="fas fa-users"></i> {l.count} pendaftar
-                </div>
+                {/* Peserta count — only counts admin-approved (status='disetujui').
+                    Label "peserta" (not "pendaftar") since pending review is excluded. */}
+                {pesertaCount > 0 ? (
+                  <div className="self-start inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#1F2937] bg-primary-light border border-[#FCE0E0] px-2.5 py-1 rounded-md">
+                    <i className="fas fa-users text-primary text-[11px]"></i>
+                    <span>{pesertaCount} peserta</span>
+                  </div>
+                ) : (
+                  <div className="self-start inline-flex items-center gap-1.5 text-[11px] text-[#9CA3AF] italic">
+                    <i className="fas fa-user-slash text-[10px]"></i>
+                    <span>Belum ada peserta</span>
+                  </div>
+                )}
               </div>
               <i className="fas fa-chevron-right text-[#9CA3AF] self-center"></i>
             </div>
