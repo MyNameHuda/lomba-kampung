@@ -332,33 +332,35 @@ export default function LombaModal({
                         </div>
                       </div>
                       <div className="space-y-2">
+                        {/* Column header — labels only once per kategori, so every PJ
+                            row is uniform height (no label-tall-first-row misalignment
+                            on the remove button). */}
+                        <div className="grid grid-cols-[1fr_1fr_auto] gap-1.5 text-[10px] text-[#6B7280] font-semibold">
+                          <div>Nama</div>
+                          <div>No WA (opsional)</div>
+                          <div className="w-9"></div>
+                        </div>
                         {list.map((pj, idx) => (
-                          <div key={idx} className="flex gap-1.5 items-start">
+                          <div key={idx} className="flex gap-1.5 items-center">
                             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
-                              <div>
-                                {idx === 0 && <div className="text-[10px] text-[#6B7280] mb-0.5">Nama</div>}
-                                <input
-                                  className="input"
-                                  value={pj.nama}
-                                  onChange={(e) => setPj(katId, idx, "nama", e.target.value)}
-                                  placeholder="Nama PJ (cth: Bu Yuni)"
-                                />
-                              </div>
-                              <div>
-                                {idx === 0 && <div className="text-[10px] text-[#6B7280] mb-0.5">No WA (opsional)</div>}
-                                <input
-                                  className="input"
-                                  value={pj.kontak || ""}
-                                  onChange={(e) => setPj(katId, idx, "kontak", e.target.value)}
-                                  placeholder="0812-..."
-                                />
-                              </div>
+                              <input
+                                className="input"
+                                value={pj.nama}
+                                onChange={(e) => setPj(katId, idx, "nama", e.target.value)}
+                                placeholder="Nama PJ (cth: Bu Yuni)"
+                              />
+                              <input
+                                className="input"
+                                value={pj.kontak || ""}
+                                onChange={(e) => setPj(katId, idx, "kontak", e.target.value)}
+                                placeholder="0812-..."
+                              />
                             </div>
                             {list.length > 1 && (
                               <button
                                 type="button"
                                 onClick={() => removePj(katId, idx)}
-                                className="w-9 h-9 mt-[1px] rounded-lg bg-[#FEE2E2] text-[#991B1B] flex items-center justify-center hover:bg-[#FECACA] flex-shrink-0"
+                                className="w-9 h-9 rounded-lg bg-[#FEE2E2] text-[#991B1B] flex items-center justify-center hover:bg-[#FECACA] flex-shrink-0"
                                 title="Hapus PJ ini"
                                 aria-label="Hapus PJ"
                               >
