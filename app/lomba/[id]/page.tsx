@@ -10,7 +10,7 @@ import {
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getInitials } from "@/lib/format";
-import { formatTanggalLomba, lombaTimeStatus, juaraLabel, type LombaTimeStatus } from "@/lib/format";
+import { formatTanggalLomba, lombaTimeStatus, juaraLabel, publicKategoriName, type LombaTimeStatus } from "@/lib/format";
 import { SECTION_ICON } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -81,6 +81,12 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
       ? "selesai"
       : showJuaraTerpilih
       ? "juara-terpilih"
+      : timeStatus === "akan-datang"
+      ? "akan-datang"
+      : timeStatus === "sedang-berlangsung"
+      ? "berlangsung"
+      : timeStatus === "lewat-jadwal"
+      ? "lewat-jadwal"
       : allKategoriTutup
       ? "final"
       : anyKategoriTutup
@@ -225,38 +231,62 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
             </h3>
             <div className="space-y-3 mt-2">
               {(() => {
-                // Group PJ entries by kategori (k_anak_l + k_anak_p shown as
-                // separate blocks so Juara 1/2/3 for each gender can be
-                // distinguished). The order is preserved from the eligible list.
-                const groups = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
-                  .map((kid) => ({
-                    kid,
-                    kat: katMap.get(kid),
-                    pjs: pjEntries.filter((e) => e.katId === kid),
-                  }))
-                  .filter((g) => g.pjs.length > 0);
-                if (groups.length === 0) {
+                // Group PJ entries by PUBLIC name so k_anak_l + k_anak_p
+                // collapse into a single "Anak" section (same PJs handle
+                // both genders — showing 2 lists of identical names is
+                // redundant for warga). Juara 1/2/3 distinction is
+                // preserved on the Finalis section (separate L/P blocks
+                // there). PJs are deduplicated by nama within a group.
+                type PjGroup = {
+                  publicName: string;
+                  sampleKat: ReturnType<typeof katMap.get>;
+                  pjs: Array<{ nama: string; kontak: string | null }>;
+                };
+                const seen = new Map<string, PjGroup>();
+                const ordered: PjGroup[] = [];
+                for (const kid of (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])) {
+                  const kat = katMap.get(kid);
+                  if (!kat) continue;
+                  const pjs = pjEntries.filter((e) => e.katId === kid).map((e) => e.pj);
+                  if (pjs.length === 0) continue;
+                  const publicName = publicKategoriName(kid);
+                  let group = seen.get(publicName);
+                  if (!group) {
+                    group = { publicName, sampleKat: kat, pjs: [] };
+                    seen.set(publicName, group);
+                    ordered.push(group);
+                  }
+                  // Use sampleKat from the first encountered kid (L or P)
+                  // — colors are usually identical or close enough; user
+                  // only sees a single combined block.
+                  for (const pj of pjs) {
+                    if (!group.pjs.some((p) => p.nama === pj.nama)) {
+                      group.pjs.push(pj);
+                    }
+                  }
+                }
+                if (ordered.length === 0) {
                   return (
                     <div className="text-center py-4 text-[#6B7280] text-sm">
                       Belum ada PJ yang ditugaskan
                     </div>
                   );
                 }
-                return groups.map((g) => (
-                  <div key={g.kid} className="border border-[#E5E7EB] rounded-lg overflow-hidden">
+                return ordered.map((g) => (
+                  <div key={g.publicName} className="border border-[#E5E7EB] rounded-lg overflow-hidden">
                     <div
                       className="px-3.5 py-2 text-[11px] font-bold text-primary uppercase tracking-wide"
                       style={{
-                        background: g.kat?.colorBg || "#F9FAFB",
-                        color: g.kat?.colorText || "#92400E",
-                        borderBottom: `1px solid ${g.kat?.colorBorder || "#E5E7EB"}`,
+                        background: g.sampleKat?.colorBg || "#F9FAFB",
+                        color: g.sampleKat?.colorText || "#92400E",
+                        borderBottom: `1px solid ${g.sampleKat?.colorBorder || "#E5E7EB"}`,
                       }}
                     >
-                      <i className="fas fa-tag"></i> {g.kat?.nama || g.kid}
+                      <i className="fas fa-tag"></i> {g.publicName}
                       <span className="ml-2 text-[10px] font-normal opacity-80 normal-case">{g.pjs.length} PJ</span>
                     </div>
                     <div className="divide-y divide-[#F3F4F6]">
-                      {g.pjs.map(({ pj }, pjIdx) => (
+                      {g.pjs.map((pj, pjIdx) => (
                         <div key={pjIdx} className="flex items-center gap-3 p-3 bg-white">
                           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
                             {getInitials(pj.nama)}
