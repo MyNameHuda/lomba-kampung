@@ -81,7 +81,7 @@ const KATEGORI_PUBLIC_NAME: Record<string, string> = {
   k_anak_l: "Anak",
   k_anak_p: "Anak",
   k_dewasa_p: "Ibu-Ibu",
-}; // Public kategori display mapping — collapsed for k_anak_l + k_anak_p on public pages.
+}; // Public kategori display mapping — collapsed for k_anak_l + k_anak_p on public pages. //
 
 export function publicKategoriName(kategoriId: string): string {
   return KATEGORI_PUBLIC_NAME[kategoriId] ?? kategoriId;
