@@ -595,18 +595,27 @@
 .mobile-hero p { font-size: 14px; opacity: 0.9; position: relative; z-index: 1; margin-top: 4px; }
 
 .lomba-card {
-  background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px;
-  margin-bottom: 14px; display: flex; gap: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 14px;
+  margin-bottom: 14px; display: flex; gap: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);
   transition: all 0.2s;
+}
+@media (min-width: 768px) {
+  .lomba-card { padding: 16px; gap: 14px; }
 }
 .lomba-card:hover { border-color: #E11D1D; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
 .lomba-icon {
-  width: 60px; height: 60px; border-radius: 12px; background: #FCE0E0; color: #E11D1D;
-  display: flex; align-items: center; justify-content: center; font-size: 28px; flex-shrink: 0;
+  width: 48px; height: 48px; border-radius: 10px; background: #FCE0E0; color: #E11D1D;
+  display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0;
   line-height: 1;
 }
+@media (min-width: 768px) {
+  .lomba-icon { width: 60px; height: 60px; border-radius: 12px; font-size: 28px; }
+}
 .lomba-info { flex: 1; min-width: 0; }
-.lomba-info h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; line-height: 1.3; }
+.lomba-info h3 { font-size: 14px; font-weight: 700; margin-bottom: 6px; line-height: 1.3; }
+@media (min-width: 768px) {
+  .lomba-info h3 { font-size: 15px; }
+}
 
 .bottom-nav {
   position: sticky; bottom: 0; background: white; border-top: 1px solid #E5E7EB;

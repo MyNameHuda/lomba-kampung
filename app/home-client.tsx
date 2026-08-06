@@ -144,7 +144,7 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
         </div>
       )}
 
-      {/* ====== Card grid (1 col mobile, 2 col tablet+) ====== */}
+      {/* ====== Card grid (1 col mobile/tablet, 2 col desktop) ====== */}
       {visibleLomba.length === 0 ? (
         <div className="card p-10 text-center text-[#6B7280]">
           <i className="fas fa-search text-5xl text-[#D1D5DB] mb-3 block"></i>
@@ -152,7 +152,7 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
           <p className="text-[13px]">Coba kata kunci lain atau ubah filter kategori.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
           {visibleLomba.map((l) => {
             const eligibleKats = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
               .map((kid) => katMap.get(kid))
@@ -170,7 +170,7 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
                 <div className="lomba-icon">{l.emoji}</div>
                 <div className="lomba-info flex flex-col gap-2 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="flex-1 min-w-0">{l.nama}</h3>
+                    <h3 className="flex-1 min-w-0 break-words">{l.nama}</h3>
                     {(() => {
                       const ts = lombaTimeStatus(l.jadwalByKategori, l.kategoriEligible);
                       const noPeserta = pesertaCount === 0;
