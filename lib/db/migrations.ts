@@ -310,7 +310,16 @@ export async function ensureGenderSplitKategori(): Promise<void> {
   // Safe now because lomba_kategori / pendaftar / lomba_jadwal all point
   // to k_dewasa_p. The FK ON DELETE CASCADE on lomba_kategori /
   // lomba_jadwal will not fire (no rows reference k_dewasa anymore).
-  if (kDewasa && kDewasaP) {
-    await run("DELETE FROM kategori WHERE id = 'k_dewasa'");
+  //
+  // Re-check k_dewasa_p in the DB (not the snapshot at the top) — the
+  // top-of-function check would have stored kDewasaP=null if it didn't
+  // exist yet, even though Step 2 above just created it. Without the
+  // re-check, this DELETE would silently skip and k_dewasa would stick
+  // around forever.
+  if (kDewasa) {
+    const kDewasaPNow = await get<{ id: string }>("SELECT id FROM kategori WHERE id = 'k_dewasa_p'");
+    if (kDewasaPNow) {
+      await run("DELETE FROM kategori WHERE id = 'k_dewasa'");
+    }
   }
 }
