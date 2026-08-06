@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { KAT_ICON, DEFAULT_KAT_ICON } from "@/lib/constants";
@@ -22,19 +22,74 @@ type Lomba = {
   emoji: string;
 };
 
+// Virtual kategori id used in the form when the lomba is eligible for BOTH
+// k_anak_l and k_anak_p. We collapse them into a single "Anak" option here and
+// resolve to the real id (k_anak_l / k_anak_p) at submit time based on the
+// user-picked jenis_kelamin. This keeps the public form simple — warga just
+// pick "Anak" + their gender, and the system auto-sorts into L / P peserta
+// list (which is the existing `groupPendaftarForLomba` behaviour).
+const VIRTUAL_ANAK_ID = "_anak";
+
+/**
+ * Collapse k_anak_l + k_anak_p into a single "Anak" picker option when both
+ * are eligible. The merged option reuses the underlying k_anak_l fields for
+ * icon / min / max / autoAge (L and P share the same range and metadata —
+ * only the gender storage differs). When only one of L/P is eligible, we
+ * surface it as-is (so single-gender lomba like a girls-only lomba shows
+ * "Anak (Perempuan)" explicitly).
+ */
+function collapseKats(kategori: Kategori[]): Kategori[] {
+  const anakL = kategori.find((k) => k.id === "k_anak_l");
+  const anakP = kategori.find((k) => k.id === "k_anak_p");
+  if (anakL && anakP) {
+    const ref = anakL; // L and P share min/max/icon/autoAge
+    return [
+      ...kategori.filter((k) => k.id !== "k_anak_l" && k.id !== "k_anak_p"),
+      { id: VIRTUAL_ANAK_ID, nama: "Anak", icon: ref.icon, min: ref.min, max: ref.max, autoAge: ref.autoAge },
+    ];
+  }
+  return kategori;
+}
+
+/**
+ * Resolve a form-level kategori id to the real DB kategori id.
+ * Virtual "_anak" gets mapped to k_anak_l / k_anak_p based on jenis_kelamin.
+ * Other ids (k_balita, k_dewasa_p, real k_anak_l / k_anak_p) pass through.
+ */
+function resolveKategoriId(formId: string, jenisKelamin: "L" | "P"): string {
+  if (formId === VIRTUAL_ANAK_ID) return jenisKelamin === "L" ? "k_anak_l" : "k_anak_p";
+  return formId;
+}
+
 export default function DaftarForm({ lomba, kategori }: { lomba: Lomba; kategori: Kategori[] }) {
   const router = useRouter();
+
+  // Pick the kategori list the user actually sees in Step 1. The raw `kategori`
+  // prop may contain both k_anak_l + k_anak_p — we collapse them so the picker
+  // shows a single "Anak" option when both are eligible.
+  const displayKats = useMemo(() => collapseKats(kategori), [kategori]);
+
   // Default to first eligible kategori (caller has already filtered by lomba.kategoriEligible)
-  const [selectedKategori, setSelectedKategori] = useState<string | null>(kategori[0]?.id || null);
+  const [selectedKategori, setSelectedKategori] = useState<string | null>(displayKats[0]?.id || null);
   const [selectedUmur, setSelectedUmur] = useState<number | null>(null);
   const [nama, setNama] = useState("");
   const [jenisKelamin, setJenisKelamin] = useState<"L" | "P">("L");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  // If displayKats changes (e.g. props update) and current selection is no
+  // longer valid, fall back to the first option. This keeps the form in sync
+  // without a hard remount.
+  useEffect(() => {
+    if (!selectedKategori || !displayKats.find((k) => k.id === selectedKategori)) {
+      setSelectedKategori(displayKats[0]?.id || null);
+      setSelectedUmur(null);
+    }
+  }, [displayKats, selectedKategori]);
+
   const selectedKat = useMemo(
-    () => kategori.find((k) => k.id === selectedKategori) || null,
-    [selectedKategori, kategori]
+    () => displayKats.find((k) => k.id === selectedKategori) || null,
+    [selectedKategori, displayKats]
   );
 
   const ages = useMemo(() => {
@@ -49,7 +104,7 @@ export default function DaftarForm({ lomba, kategori }: { lomba: Lomba; kategori
   // Reset umur when kategori changes
   function selectKategori(id: string) {
     setSelectedKategori(id);
-    const kat = kategori.find((k) => k.id === id);
+    const kat = displayKats.find((k) => k.id === id);
     if (kat) {
       // For autoAge categories, default umur to min (e.g. 18 for Dewasa)
       setSelectedUmur(kat.autoAge ? kat.min : null);
@@ -62,6 +117,10 @@ export default function DaftarForm({ lomba, kategori }: { lomba: Lomba; kategori
     setSubmitting(true);
     setError("");
     try {
+      // Resolve the form-level kategori id to the real DB id. The form
+      // collapses k_anak_l + k_anak_p into a single "Anak" option, so we
+      // need to map back based on the user-picked jenis_kelamin.
+      const realKategoriId = resolveKategoriId(selectedKategori!, jenisKelamin);
       const res = await fetch("/api/pendaftar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -69,7 +128,7 @@ export default function DaftarForm({ lomba, kategori }: { lomba: Lomba; kategori
           nama: nama.trim(),
           noWa: null,
           jenisKelamin,
-          kategoriId: selectedKategori,
+          kategoriId: realKategoriId,
           umur: selectedUmur,
           lombaId: lomba.id,
         }),
@@ -105,7 +164,7 @@ export default function DaftarForm({ lomba, kategori }: { lomba: Lomba; kategori
         <div className="mb-4">
           <label className="label">Pilih Kategori <span className="text-primary">*</span></label>
           <div className="flex flex-col gap-2">
-            {kategori.map((k) => (
+            {displayKats.map((k) => (
               <button
                 key={k.id}
                 type="button"
