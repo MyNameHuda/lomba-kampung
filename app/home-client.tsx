@@ -112,44 +112,43 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
       </h2>
 
       {visibleLomba.map((l) => {
-        const tags = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
+        const eligibleKats = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
           .map((kid) => katMap.get(kid))
-          .filter(Boolean)
-          .map((k) => (
-            <KatTag
-              key={k!.id}
-              nama={k!.nama}
-              colorBg={k!.colorBg}
-              colorText={k!.colorText}
-              colorBorder={k!.colorBorder}
-            />
-          ));
-        // Show jadwal: pick the earliest tanggal across kategori, or render a
-        // single "Berbagai tanggal" hint if multiple distinct dates.
-        const jadwals = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
-          .map((kid) => l.jadwalByKategori?.[kid])
-          .filter((j): j is NonNullable<typeof j> => !!j && j.tanggal != null);
-        const uniqueDates = Array.from(new Set(jadwals.map((j) => j.tanggal))).sort((a, b) => (a as number) - (b as number));
-        const jadwalLabel =
-          uniqueDates.length === 0
-            ? null
-            : uniqueDates.length === 1
-            ? formatTanggalLomba(uniqueDates[0] as number, "short")
-            : `${formatTanggalLomba(uniqueDates[0] as number, "short")} – ${formatTanggalLomba(uniqueDates[uniqueDates.length - 1] as number, "short")}`;
+          .filter((k): k is NonNullable<typeof k> => !!k);
         return (
           <Link key={l.id} href={`/lomba/${l.id}`} className="block no-underline text-inherit">
             <div className="lomba-card">
               <div className="lomba-icon">{l.emoji}</div>
               <div className="lomba-info flex flex-col gap-2">
                 <h3>{l.nama}</h3>
-                {jadwalLabel && (
-                  <div className="text-[11px] text-[#6B7280] flex items-center gap-1.5">
-                    <i className="far fa-calendar text-primary"></i>
-                    <span className="font-semibold text-[#1F2937]">{jadwalLabel}</span>
-                  </div>
-                )}
                 {l.deskripsi && <p className="text-[11px] text-[#6B7280] line-clamp-2 leading-relaxed">{l.deskripsi}</p>}
-                <div className="flex flex-wrap gap-1.5">{tags}</div>
+                <div className="flex flex-col gap-1.5">
+                  {eligibleKats.map((k) => {
+                    const j = l.jadwalByKategori?.[k.id];
+                    const hasJadwal = j && j.tanggal != null;
+                    return (
+                      <div key={k.id} className="flex flex-col gap-0.5 leading-snug">
+                        <KatTag
+                          nama={k.nama}
+                          colorBg={k.colorBg}
+                          colorText={k.colorText}
+                          colorBorder={k.colorBorder}
+                        />
+                        {hasJadwal ? (
+                          <div className="text-[10px] text-[#6B7280] flex items-center gap-1 pl-1">
+                            <i className="far fa-calendar text-[10px] text-primary"></i>
+                            <span className="font-semibold text-[#374151]">
+                              {formatTanggalLomba(j!.tanggal as number, "short")}
+                            </span>
+                            {j!.jam && <span className="text-[#9CA3AF]">· {j!.jam}</span>}
+                          </div>
+                        ) : (
+                          <div className="text-[10px] text-[#9CA3AF] pl-1 italic">Belum dijadwalkan</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
                 <div className="text-[11px] text-[#6B7280]">
                   <i className="fas fa-users"></i> {l.count} pendaftar
                 </div>
