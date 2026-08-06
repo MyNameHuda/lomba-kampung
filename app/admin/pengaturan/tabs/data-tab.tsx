@@ -17,7 +17,7 @@ export default function DataTab() {
 
   function downloadExcel() {
     window.location.href = "/api/admin/export";
-    notify.info("Mendownload export CSV...");
+    notify.info("Mendownload export Excel (.xlsx)...");
   }
 
   async function doReset() {
@@ -59,8 +59,8 @@ export default function DataTab() {
       <div className="p-5 space-y-3">
         <div className="flex items-center justify-between gap-4 p-3.5 border-b border-[#E5E7EB]">
           <div>
-            <div className="text-[13px] font-semibold">Export Semua Data (CSV / Excel)</div>
-            <div className="text-[11px] text-[#6B7280]">Download data lomba & peserta, bisa dibuka di Excel</div>
+            <div className="text-[13px] font-semibold">Export Semua Data (Excel .xlsx)</div>
+            <div className="text-[11px] text-[#6B7280]">Download data lomba & peserta dalam workbook Excel (3 sheet: Lomba, Peserta, Kategori)</div>
           </div>
           <button onClick={downloadExcel} className="btn btn-secondary"><i className="fas fa-file-excel"></i> Download</button>
         </div>
