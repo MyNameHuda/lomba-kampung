@@ -1,232 +1,239 @@
-# 🇮🇩 Lomba Kampung
+# Lomba Kampung
 
-Web app manajemen lomba 17 Agustus (HUT RI) untuk skala kampung. Mobile-first, ringan, gratis sepenuhnya, tanpa jadwal/kuota.
+Web app buat ngatur lomba 17 Agustus (HUT RI) di skala kampung. Mobile-first,
+gratis total di Vercel + Turso free tier, no jadwal, no kuota, password-only
+admin.
 
-**Stack:** Next.js 14 · TypeScript · Tailwind · libSQL (Turso) · iron-session · Zod
+Live demo: <https://lomba-app.vercel.app>
 
----
+## Fitur
 
-## ✨ Fitur
+- **Manajemen lomba** — CRUD lomba, kategori usia dinamis (Balita / Anak L/P /
+  Dewasa di-derive dari master `kategori` table), PJ multi-orang per kategori.
+- **Pendaftaran publik** — form 3-step, no login, no captcha. Generate nomor
+  peserta auto-increment per tahun.
+- **Approval queue** — admin approve/reject pendaftar, bulk actions,
+  client-side filter.
+- **Stage system v4** — Kualifikasi per-kategori (Loloskan/Gugur) → Final
+  (Juara 1/2/3) → Selesai. Lihat [`docs/STAGE_SYSTEM.md`](docs/STAGE_SYSTEM.md)
+  buat detail lengkap.
+- **Backup & export** — download JSON seluruh data, restore via reset.
+- **Mobile-first** — dioptimasi untuk HP low-end warga kampung (viewport
+  414px jadi baseline).
 
-- 🏆 **Manajemen lomba** — CRUD lomba, kategori usia, dan Penanggung Jawab (PJ) per kategori
-- 📝 **Pendaftaran publik** — form 3-step mobile-friendly, tanpa login
-- ✅ **Approval queue** — admin approve/reject pendaftar yang masuk
-- 📋 **Daftar peserta** — lihat per lomba, tandai hadir, grouped by usia (Balita / Anak L/P / Dewasa)
-- 🏷️ **Kategori dinamis** — tambah/edit/hapus kategori usia, urutan fleksibel
-- 💾 **Backup & export** — download JSON seluruh data, restore via reset
-- 📱 **Mobile-first** — dioptimasi untuk HP low-end warga kampung
+## Stack
 
----
+| Layer        | Tool                                |
+|--------------|-------------------------------------|
+| Framework    | Next.js 14 (App Router) + Turbopack |
+| Language     | TypeScript 5.6                      |
+| Styling      | Tailwind 3.4 + custom CSS           |
+| Database     | libSQL (Turso prod, SQLite local)   |
+| Auth         | iron-session (encrypted cookie)     |
+| Validation   | Zod 3.23                            |
 
-## 🚀 Deploy (Vercel + Turso) — GRATIS, NO DOCKER
+Kenapa stack ini: semuanya free tier generous, zero Docker, deploy push-to-deploy
+lewat Vercel. Detail di bawah.
 
-Path ini yang paling recommended. **Total biaya: $0/bulan** selamanya (selama di bawah Vercel + Turso free tier limits).
+## Deploy ke Vercel + Turso
 
-### Arsitektur
+Total biaya $0/bulan selama di bawah free tier (Vercel hobby, Turso 9GB).
 
-- **Vercel** — hosting Next.js (free tier: 100GB bandwidth, unlimited requests untuk hobby)
-- **Turso** — managed libSQL database (free tier: 9GB storage, 1B row reads/bulan, 500 region)
-- **GitHub** — source code + auto-deploy on push
+### 1. Setup Turso
 
-### Step 1: Setup Turso (5 menit)
-
-Install Turso CLI (Windows pakai WSL atau download dari [turso.tech/cli](https://turso.tech/cli)):
+Turso CLI gampang di-install di macOS/Linux. Di Windows, cara termudah
+pakai WSL atau langsung via web console di <https://app.turso.tech>.
 
 ```bash
 # Login
 turso auth login
 
-# Create database
-turso db create lomba-kampung
+# Create database (region terdekat, mis. Tokyo)
+turso db create lomba-kampung --location aws-ap-northeast-1
 
-# Get connection URL
+# Ambil connection URL
 turso db show lomba-kampung --url
-# Output: libsql://lomba-kampung-<your-org>.turso.io
+# → libsql://lomba-kampung-<your-org>.turso.io
 
 # Create auth token
 turso db tokens create lomba-kampung
-# Output: eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9...
 ```
 
-Simpan URL dan token — ini akan dimasukkan ke Vercel.
+Simpan dua nilai itu — masuk ke Vercel di step 4.
 
-### Step 2: Push schema + seed ke Turso
+### 2. Push schema + seed ke Turso
 
-Sekali ini aja (pertama kali deploy), untuk populate database di Turso:
-
-```bash
-# Set env ke Turso (bukan local)
-export DATABASE_URL="libsql://lomba-kampung-<your-org>.turso.io"
-export DATABASE_AUTH_TOKEN="<token-dari-step-1>"
-
-# Apply schema (CREATE TABLE IF NOT EXISTS)
-npm run db:push
-
-# Seed default data (kategori + 8 contoh lomba)
-npm run db:seed
-```
-
-### Step 3: Push ke GitHub
+Clone repo ini dulu, terus apply schema ke Turso:
 
 ```bash
-git init
-git add .
-git commit -m "Initial commit"
-gh repo create lomba-kampung --public --source=. --remote=origin --push
-```
-
-Atau push ke repo yang sudah ada:
-```bash
-git remote add origin git@github.com:<username>/lomba-kampung.git
-git push -u origin main
-```
-
-### Step 4: Deploy ke Vercel (3 menit)
-
-1. Buka [vercel.com/new](https://vercel.com/new)
-2. **Import** repo GitHub `lomba-kampung`
-3. **Environment Variables** — tambahkan 3 ini:
-   - `SESSION_PASSWORD` → generate dengan `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` (paste hasilnya, JANGAN pakai default)
-   - `DATABASE_URL` → `libsql://...` dari Step 1
-   - `DATABASE_AUTH_TOKEN` → token dari Step 1
-4. Klik **Deploy**
-
-Vercel akan build + deploy dalam ~60 detik. URL production akan muncul (mis. `lomba-kampung.vercel.app`).
-
-### Step 5: Ganti admin password
-
-Default admin password adalah `lomba123`. Setelah deploy:
-1. Buka `https://<your-app>.vercel.app/admin/login`
-2. Login dengan `lomba123`
-3. Buka **Pengaturan → Ubah Password**
-4. Ganti ke password yang kuat
-
-### Step 6 (opsional): Custom domain
-
-Di Vercel → Project → Settings → Domains, tambahkan domain kamu (mis. `lomba.kampungku.id`). Free SSL otomatis.
-
----
-
-## 💻 Local Development
-
-### Prasyarat
-
-- **Node.js 22.5+** (untuk libSQL & Next.js 14.2+)
-- **Git**
-
-### Setup
-
-```bash
-# Clone & install
-git clone <repo-url> lomba-kampung
+git clone https://github.com/MyNameHuda/lomba-kampung.git
 cd lomba-kampung
 npm install
 
-# Copy env
-cp .env.example .env.local
-# Edit .env.local: set SESSION_PASSWORD (min 32 char random)
+export DATABASE_URL="libsql://lomba-kampung-<your-org>.turso.io"
+export DATABASE_AUTH_TOKEN="<token-dari-step-1>"
 
-# Seed local DB (file:./lomba.db)
-npm run db:seed
-
-# Run dev server (Turbopack, 5-10× faster compile)
-npm run dev
+npm run db:push    # apply schema.sql
+npm run db:seed    # insert default kategori + 8 contoh lomba
 ```
 
-Buka `http://localhost:3000`. Login admin: `/admin/login` → password `lomba123`.
+### 3. Push ke GitHub
 
-### Scripts
-
-| Script              | Fungsi                                                |
-|---------------------|-------------------------------------------------------|
-| `npm run dev`       | Dev server dengan Turbopack (fast refresh)            |
-| `npm run build`     | Production build                                      |
-| `npm run start`     | Run production build (set NODE_ENV=production dulu)   |
-| `npm run db:seed`   | Seed kategori + 8 contoh lomba ke local/Turso DB      |
-| `npm run db:push`   | Apply schema.sql ke Turso (untuk migration)           |
-| `npm run db:reset`  | Hapus local DB + seed ulang (dev only)                |
-
-### Switching antara local & Turso
+Buat repo baru di GitHub (atau fork yang ini), terus:
 
 ```bash
-# Local (default — uses ./lomba.db)
-unset DATABASE_URL
-unset DATABASE_AUTH_TOKEN
+git remote set-url origin git@github.com:<username>/lomba-kampung.git
+git push -u origin main
+```
+
+### 4. Deploy ke Vercel
+
+1. Buka <https://vercel.com/new>
+2. Import repo GitHub
+3. **Environment Variables** (wajib):
+   - `SESSION_PASSWORD` — generate dengan
+     `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+     App throws on boot kalau missing atau < 32 char di production.
+   - `DATABASE_URL` — `libsql://...` dari step 1
+   - `DATABASE_AUTH_TOKEN` — token dari step 1
+4. Klik **Deploy**
+
+URL production bakal muncul dalam ~60 detik.
+
+### 5. Ganti admin password
+
+Default password `lomba123`. Setelah deploy, login di
+`/admin/login`, terus **Pengaturan → Ubah Password**.
+
+## Local development
+
+```bash
+# Prasyarat: Node.js 22.5+
+node --version
+
+# Setup
+cp .env.example .env.local
+# Edit .env.local: set SESSION_PASSWORD (random 32+ char)
+
+# Local DB (SQLite file ./lomba.db) di-seed otomatis
+npm run db:seed
+
+# Dev server
 npm run dev
-
-# Turso (untuk test dengan production data)
-export DATABASE_URL="libsql://..."
-export DATABASE_AUTH_TOKEN="..."
-npm run dev
+# → http://localhost:3000
 ```
 
----
+Untuk test koneksi ke Turso production, set `DATABASE_URL` + `DATABASE_AUTH_TOKEN`
+di `.env.local` terus run `npm run dev` lagi.
 
-## 🗃️ Schema
+## Scripts
 
-Lihat `lib/db/schema.sql` (5 tabel: `settings`, `kategori`, `lomba`, `lomba_kategori`, `pendaftar`).
+| Script              | Fungsi                                              |
+|---------------------|-----------------------------------------------------|
+| `npm run dev`       | Dev server (Turbopack)                              |
+| `npm run build`     | Production build                                    |
+| `npm run start`     | Run production build                                |
+| `npm run db:push`   | Apply `schema.sql` ke DB target                     |
+| `npm run db:seed`   | Seed default kategori + 8 contoh lomba              |
+| `npm run db:reset`  | Hapus local DB + seed ulang (dev only)              |
 
-**Display grouping** (Balita / Anak L / Anak P / Dewasa) di-derive otomatis dari master `kategori` table — single source of truth. Section classification:
-- `balita` — kategori dengan `min < 5`
-- `anak` — `5 <= min < 18`, di-split L/P
-- `dewasa` — `min >= 18` (no upper limit)
+`db:push` pakai `executeMultiple()` jadi aman untuk multi-statement
+`CREATE TABLE IF NOT EXISTS` di Turso HTTP.
 
-**Sort rules:**
-- Dewasa: by `created_at` ASC (urutan daftar)
-- Balita/Anak: by `umur` ASC, lalu `created_at` tiebreaker
+## Testing
 
----
+`test-v4-system.cjs` adalah E2E test untuk stage system v4. 28 assertions
+yang cover full flow: schema → Loloskan/Gugur → Tutup Kualifikasi → Juara
+picking → Selesaikan → public page.
 
-## 🔒 Security Checklist (Production)
-
-- [x] `SESSION_PASSWORD` ≥ 32 char random (wajib di production, app throws on boot jika tidak)
-- [x] `secure` cookie flag otomatis aktif saat `NODE_ENV=production`
-- [x] `httpOnly` cookie (tidak bisa diakses dari JS)
-- [x] `sameSite: lax` (CSRF protection)
-- [x] Zod validation di semua POST endpoints
-- [x] Admin auth check (`isAuthenticated()`) di semua `/api/admin/*` routes
-- [ ] **WAJIB:** Ganti default admin password `lomba123` setelah first login
-- [ ] **OPSIONAL:** Migrate SHA256 → bcrypt/argon2 untuk password hashing (saat ini SHA256+static salt cukup untuk lomba kecil, tapi bcrypt lebih proper)
-
----
-
-## 🛠️ Troubleshooting
-
-### Build error: "URL_INVALID: The URL './lomba.db' is not in a valid format"
-
-Local `DATABASE_URL` harus absolute path atau pakai `file:` prefix dengan absolute path. App sudah auto-resolve dari `./lomba.db` → `file:<cwd>/lomba.db`. Kalau masih error, pakai absolute:
-```
-DATABASE_URL=file:C:/Users/.../lomba.db
+```bash
+# Butuh dev server jalan di :3000 atau target BASE di-set ke prod
+node test-v4-system.cjs
 ```
 
-### Health check returns 503
+Test ini jalan dari API + Puppeteer (Chrome). Output PASS/FAIL count di
+akhir.
 
-Cek `DATABASE_URL` + `DATABASE_AUTH_TOKEN` di Vercel env vars. Pastikan token masih aktif di Turso (`turso db tokens list`).
+## Stage system v4 (ringkas)
 
-### Schema tidak ter-apply di Turso
+Detail lengkap + migration history di [`docs/STAGE_SYSTEM.md`](docs/STAGE_SYSTEM.md).
+TL;DR:
 
-`client.execute()` di libSQL cuma execute statement pertama. Pakai `executeMultiple()` atau split manual. Script `db:push` sudah pakai `executeMultiple()` — jadi aman.
+- **Finalist** state: `pendaftar.is_finalist` (tri-state: null=pending, 1=lolos,
+  0=gugur). Gugur reversible.
+- **Tutup Kualifikasi** per-kategori (independen). Disimpan sebagai JSON di
+  kolom `lomba.phase` (kolom lama dari v3, gak butuh ALTER baru).
+- **Juara 1/2/3** dari finalists, require kategori Tutup dulu.
+- **Selesaikan Lomba** (status → 'selesai') require Juara 1+2 per eligible
+  kategori.
+- **Public page** punya 5 badge variant: Coming Soon, Sedang Berlangsung,
+  Tahap Kualifikasi, Tahap Final / Juara Terpilih, Selesai.
 
-### Login admin gagal setelah deploy
+Kenapa JSON di kolom existing bukan ALTER kolom baru: ada libSQL HTTP
+schema-cache race di Vercel Lambda yang bikin UPDATE ke kolom baru kadang
+gagal. Pattern JSON-in-existing-column menghindari itu total.
 
-Pastikan `SESSION_PASSWORD` di Vercel sama dengan yang dipakai di local. Kalau ganti password env, harus logout + login ulang.
+## Struktur project
 
----
+```
+app/                  # Next.js App Router
+  page.tsx            # Public home (lomba list)
+  lomba/[id]/         # Public lomba detail + daftar form
+  admin/              # Admin dashboard (login required)
+    lomba/            # CRUD lomba + Juara page
+    approval/         # Approval queue
+    peserta/          # Daftar peserta grouped
+    pengaturan/       # Settings tabs
+    input-manual/     # Manual pendaftar entry
+  api/
+    admin/            # Admin-only endpoints (auth + Zod)
+    pendaftar/        # Public pendaftar POST
+components/           # Shared React components
+lib/
+  auth.ts             # iron-session helpers
+  db/                 # Database layer (libSQL)
+    migrations.ts     # Self-healing migrations
+    schema.sql        # Source of truth for schema
+    seed.cjs          # Initial data seeder
+    migrate.cjs       # db:push script
+  types.ts            # Client-side slim types
+  format.ts           # Date / string formatters
+  constants.ts        # Icons, colors
+docs/                 # Long-form docs (STAGE_SYSTEM.md)
+public/               # Static assets (logo, hero bg)
+test-v4-system.cjs    # Canonical E2E test
+```
 
-## 📦 Tech Stack Details
+## Security
 
-| Layer        | Tool                              | Kenapa?                                        |
-|--------------|-----------------------------------|------------------------------------------------|
-| Framework    | Next.js 14 (App Router)           | SSR + Edge-ready, file-based routing           |
-| Language     | TypeScript 5.6                    | Type safety, IDE intellisense                  |
-| Styling      | Tailwind 3.4 + custom CSS         | Mobile-first, fast iteration                   |
-| Database     | @libsql/client + Turso            | SQLite-compatible, free managed, edge-replicas |
-| Auth         | iron-session                      | Stateless, encrypted cookie, no JWT overhead   |
-| Validation   | Zod 3.23                          | Runtime + compile-time schema validation       |
-| Build        | Turbopack (dev) + Webpack (prod)  | 5-10× faster dev compile                       |
+- `SESSION_PASSWORD` wajib random 32+ char di production (app validates on boot).
+- Cookie: `httpOnly`, `secure` (auto di production), `sameSite: lax`.
+- Zod validation di semua POST endpoint.
+- `isAuthenticated()` guard di semua `/api/admin/*` route.
+- Default admin password `lomba123` — **WAJIB diganti** setelah first login.
+- Password hashing saat ini SHA256+static salt. Untuk lomba kecil udah cukup,
+  tapi kalau mau lebih proper migrate ke bcrypt/argon2 (lihat TODO di
+  `lib/auth.ts`).
 
----
+## Troubleshooting
 
-## 📄 License
+**`URL_INVALID: The URL './lomba.db' is not in a valid format`**
+Local `DATABASE_URL` harus absolute atau `file:` prefix. App auto-resolve
+dari `./lomba.db` ke `file:<cwd>/lomba.db`. Kalau masih error, pakai
+absolute: `DATABASE_URL=file:C:/path/to/lomba.db`.
 
-MIT — bebas dipakai untuk lomba kampung manapun. Merdeka! 🇮🇩
+**Health check returns 503**
+Cek `DATABASE_URL` + `DATABASE_AUTH_TOKEN` di Vercel env. Token bisa expire,
+regenerate via `turso db tokens create lomba-kampung`.
+
+**Schema gak ke-apply di Turso**
+`client.execute()` di libSQL cuma execute statement pertama. Pakai
+`executeMultiple()` atau split manual. `db:push` udah handle ini.
+
+**Login admin gagal setelah deploy**
+`SESSION_PASSWORD` di Vercel harus sama dengan yang dipake waktu seed. Kalau
+ganti env var, logout + login ulang.
+
+## License
+
+MIT — bebas dipakai untuk lomba kampung manapun. Merdeka.

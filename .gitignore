@@ -4,6 +4,7 @@ out
 .env*.local
 .env*
 .env.production
+.env.turso
 *.db
 *.db-journal
 .DS_Store
@@ -13,34 +14,20 @@ out
 
 .vercel
 
-# Debug / test artifacts (created during local debugging sessions)
-/check-*.cjs
-/test-*.cjs
-/list-*.cjs
-/capture-*.cjs
-/debug-*.cjs
-/inspect-*.cjs
-/verify-*.cjs
-/cleanup-*.cjs
-/cleanup.cjs
-/crud-*.cjs
-/final-shots.cjs
-/fetch-lomba.cjs
-/snap-full.cjs
-/perf-*.cjs
-/set-*.cjs
-/migrate-*.cjs
-/fix-*.cjs
-/gen-*.py
-/recolor.py
-/check-*.py
-/fix-*.py
+# Local debug / one-off scripts (underscore prefix = throwaway, never commit)
+/_*.cjs
+/_*.py
 /_unused_backup_*/
+
+# E2E tests at repo root. Only test-v4-system.cjs is the canonical
+# test that ships with the repo; all other test-*.cjs are throwaway.
+/test-*.cjs
+!/test-v4-system.cjs
+
+# Local screenshot dumps (Puppeteer captures, dev artifacts)
+/*.png
 /screenshot-*.png
 /crud-*.png
-/realtime-*.png
-/rt2-*.png
-/sukses-page.png
 /daftar-*.png
 /err-*.png
 /bg-*.png
@@ -48,5 +35,12 @@ out
 /filter-*.png
 /tag-*.png
 /after-*.png
+/realtime-*.png
+/rt2-*.png
+/sukses-page.png
+/public-juara-screenshot.png
+/juara-ui-*.png
+
+# Process / capture logs
 /stderr.txt
 /stdout.txt
