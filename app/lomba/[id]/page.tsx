@@ -10,7 +10,7 @@ import {
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getInitials } from "@/lib/format";
-import { formatTanggalLomba, lombaTimeStatus, juaraLabel, type LombaTimeStatus } from "@/lib/format";
+import { formatTanggalLomba, lombaTimeStatus, juaraLabel, publicKategoriName, groupKategoriByPublicName, type LombaTimeStatus } from "@/lib/format";
 import { SECTION_ICON } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -96,6 +96,7 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
     umur: number;
     jenisKelamin: "L" | "P";
     juaraRank: number | null; // 1, 2, 3 if Juara; null if just finalist
+    kategoriId: string;        // original sub-kategori (k_anak_l / k_anak_p / k_balita / k_dewasa_p)
   }>> = {};
 
   // Map: pendaftarId → Juara rank (1, 2, 3 only) from getJuaraByLomba
@@ -113,6 +114,11 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
         umur: p.umur,
         jenisKelamin: p.jenisKelamin,
         juaraRank: juaraRankById.get(p.id) ?? null,
+        // Track original sub-kategori so the public juaraLabel call
+        // (which still uses kategoriId for the optional admin suffix)
+        // has the right context. On public we pass forPublic=true so
+        // the gender suffix is dropped regardless of this value.
+        kategoriId: katId,
       }))
       // Sort: Juara 1/2/3 first (by rank ASC), then non-Juara finalists by umur ASC
       .sort((a, b) => {
@@ -142,7 +148,12 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
           <h1 className="text-[22px] font-extrabold mb-1">{l.nama}</h1>
           <div className="flex flex-col items-center gap-3 mb-2">
             <span className="inline-block bg-white/20 px-3 py-1 rounded-full text-[11px] font-semibold">
-              {l.kategoriEligible.map((k) => katMap.get(k)?.nama).filter(Boolean).join(" · ")}
+              {/* Use publicKategoriName so k_anak_l + k_anak_p collapse to
+                  a single "Anak" pill on public. The dot separator is
+                  preserved between collapsed groups. */}
+              {groupKategoriByPublicName(
+                (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : []).filter((kid) => !!katMap.get(kid))
+              ).map((g) => g.publicName).join(" · ")}
             </span>
             <PublicStatusBadge status={publicStatus} />
           </div>
@@ -172,27 +183,40 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
                 <i className="far fa-calendar text-primary"></i> Jadwal Pelaksanaan
               </h3>
               {(() => {
-                const jadwals = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
-                  .map((kid) => ({ kid, jadwal: l.jadwalByKategori?.[kid] }))
-                  .filter((x) => x.jadwal && (x.jadwal.tanggal != null || x.jadwal.jam != null));
-                if (jadwals.length === 0) {
+                // Group by public name so k_anak_l + k_anak_p share one card.
+                // Each public-name group shows the earliest tanggal across
+                // its sub-kategori (most relevant for warga). If any
+                // sub-kategori in the group has a jam, we use the earliest
+                // one's jam as the canonical time.
+                const groups = groupKategoriByPublicName(
+                  (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : []).filter((kid) => !!katMap.get(kid))
+                ).map(({ publicName, kategoriIds }) => {
+                  const jadwals = kategoriIds
+                    .map((kid) => l.jadwalByKategori?.[kid])
+                    .filter((j): j is { kategoriId: string; tanggal: number | null; jam: string | null } => !!j && (j.tanggal != null || j.jam != null));
+                  return { publicName, jadwals };
+                }).filter((g) => g.jadwals.length > 0);
+                if (groups.length === 0) {
                   return <div className="text-center py-3 text-[#6B7280] text-sm">Belum ada jadwal yang diumumkan</div>;
                 }
                 return (
                   <div className="space-y-2.5 mt-2">
-                    {jadwals.map(({ kid, jadwal }) => {
-                      const kat = katMap.get(kid);
+                    {groups.map(({ publicName, jadwals }) => {
+                      // Earliest jadwal across the collapsed group
+                      const earliest = jadwals
+                        .filter((j) => j.tanggal != null)
+                        .sort((a, b) => (a.tanggal as number) - (b.tanggal as number))[0] ?? jadwals[0];
                       return (
-                        <div key={kid} className="flex items-center gap-3 p-3 bg-[#F9FAFB] rounded-lg">
+                        <div key={publicName} className="flex items-center gap-3 p-3 bg-[#F9FAFB] rounded-lg">
                           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent text-white flex items-center justify-center flex-shrink-0">
                             <i className="far fa-calendar text-base"></i>
                           </div>
                           <div className="flex-1 min-w-0 flex flex-col gap-0.5 leading-snug">
-                            {kat && <div className="text-[10px] font-bold text-primary uppercase tracking-wide">{kat.nama}</div>}
-                            {jadwal!.tanggal != null && (
-                              <div className="font-semibold text-[13px]">{formatTanggalLomba(jadwal!.tanggal as number, "weekday-long")}</div>
+                            <div className="text-[10px] font-bold text-primary uppercase tracking-wide">{publicName}</div>
+                            {earliest.tanggal != null && (
+                              <div className="font-semibold text-[13px]">{formatTanggalLomba(earliest.tanggal as number, "weekday-long")}</div>
                             )}
-                            {jadwal!.jam && <div className="text-[11px] text-[#6B7280]">Pukul {jadwal!.jam} WIB</div>}
+                            {earliest.jam && <div className="text-[11px] text-[#6B7280]">Pukul {earliest.jam} WIB</div>}
                           </div>
                         </div>
                       );
@@ -215,14 +239,21 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
             </h3>
             <div className="space-y-3 mt-2">
               {(() => {
-                // Group PJ entries by kategori, preserving the eligible order.
-                const groups = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
-                  .map((kid) => ({
-                    kid,
-                    kat: katMap.get(kid),
-                    pjs: pjEntries.filter((e) => e.katId === kid),
-                  }))
-                  .filter((g) => g.pjs.length > 0);
+                // Group PJ entries by PUBLIC NAME so k_anak_l + k_anak_p
+                // share one PJ block. The combined PJ list preserves the
+                // order from the original eligible list (k_anak_l's PJs
+                // first, then k_anak_p's PJs).
+                const groups = groupKategoriByPublicName(
+                  (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : []).filter((kid) => !!katMap.get(kid))
+                ).map(({ publicName, kategoriIds }) => {
+                  // Use the first sub-kategori in the group as the color
+                  // source (typically k_anak_l for "Anak"). The group may
+                  // contain multiple sub-kategori, each with their own
+                  // color, but the header just needs ONE consistent tint.
+                  const repKat = katMap.get(kategoriIds[0])!;
+                  const pjs = kategoriIds.flatMap((kid) => pjEntries.filter((e) => e.katId === kid));
+                  return { publicName, kat: repKat, pjs };
+                }).filter((g) => g.pjs.length > 0);
                 if (groups.length === 0) {
                   return (
                     <div className="text-center py-4 text-[#6B7280] text-sm">
@@ -231,16 +262,16 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
                   );
                 }
                 return groups.map((g) => (
-                  <div key={g.kid} className="border border-[#E5E7EB] rounded-lg overflow-hidden">
+                  <div key={g.publicName} className="border border-[#E5E7EB] rounded-lg overflow-hidden">
                     <div
                       className="px-3.5 py-2 text-[11px] font-bold text-primary uppercase tracking-wide"
                       style={{
-                        background: g.kat?.colorBg || "#F9FAFB",
-                        color: g.kat?.colorText || "#92400E",
-                        borderBottom: `1px solid ${g.kat?.colorBorder || "#E5E7EB"}`,
+                        background: g.kat.colorBg || "#F9FAFB",
+                        color: g.kat.colorText || "#92400E",
+                        borderBottom: `1px solid ${g.kat.colorBorder || "#E5E7EB"}`,
                       }}
                     >
-                      <i className="fas fa-tag"></i> {g.kat?.nama || g.kid}
+                      <i className="fas fa-tag"></i> {g.publicName}
                       <span className="ml-2 text-[10px] font-normal opacity-80 normal-case">{g.pjs.length} PJ</span>
                     </div>
                     <div className="divide-y divide-[#F3F4F6]">
@@ -276,8 +307,10 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
         </div>
 
         {/* Finalis section — replaces v2 Juara section. Shows during final phase
-            and after selesai. Juara 1/2/3 get gold/silver/bronze + "Juara N" label,
-            other finalists get plain "Finalis" label. Per-kategori blocks. */}
+            and after selesai. Juara 1/2/3 get gold/silver/bronze + "Juara N" label
+            (no gender suffix on public — gender is in the winner's profile),
+            other finalists get plain "Finalis" label. Grouped by PUBLIC NAME
+            so k_anak_l + k_anak_p share one "Anak" block. */}
         {showFinalis && (
           <div className="info-section mt-3.5">
             <h3 className="text-[13px] font-bold mb-3 text-[#1F2937] flex items-center gap-2">
@@ -287,18 +320,36 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
               </span>
             </h3>
             <div className="space-y-3">
-              {Array.isArray(l.kategoriEligible) ? l.kategoriEligible.map((kid) => {
-                const finalists = finalisByKategori[kid] || [];
+              {groupKategoriByPublicName(
+                (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : []).filter((kid) => !!katMap.get(kid))
+              ).map(({ publicName, kategoriIds }) => {
+                // Combine finalists across the collapsed group. Each finalist
+                // retains their original sub-kategori's Juara rank (1/2/3),
+                // but on public we display "Juara N" without the gender
+                // suffix since the gender is shown in the meta line.
+                const finalists = kategoriIds.flatMap((kid) => finalisByKategori[kid] || []);
                 if (finalists.length === 0) return null;
-                const kat = katMap.get(kid);
+                // Sort: Juara 1/2/3 first (by rank ASC), then by umur ASC.
+                // The list is already sorted per sub-kategori; re-sort the
+                // combined list to keep stable ordering across the group.
+                const sorted = [...finalists].sort((a, b) => {
+                  const aIsJuara = a.juaraRank !== null ? 0 : 1;
+                  const bIsJuara = b.juaraRank !== null ? 0 : 1;
+                  if (aIsJuara !== bIsJuara) return aIsJuara - bIsJuara;
+                  if (aIsJuara === 0 && bIsJuara === 0 && a.juaraRank !== null && b.juaraRank !== null) {
+                    return a.juaraRank - b.juaraRank;
+                  }
+                  return a.umur - b.umur;
+                });
+                // Pick header border color from the first sub-kategori
+                const repKat = katMap.get(kategoriIds[0])!;
                 return (
-                  <div key={kid} className="juara-public-block">
-                    <div className="juara-public-header" style={{ borderLeftColor: kat?.colorBorder || "#E11D1D" }}>
-                      {kat?.nama || kid}
+                  <div key={publicName} className="juara-public-block">
+                    <div className="juara-public-header" style={{ borderLeftColor: repKat.colorBorder || "#E11D1D" }}>
+                      {publicName}
                     </div>
                     <div className="juara-public-list">
-                      {finalists.map((f) => {
-                        // Determine if this finalist is also a Juara (rank 1, 2, or 3)
+                      {sorted.map((f) => {
                         const isJuara = f.juaraRank !== null && f.juaraRank <= 3;
                         const rowClass = isJuara ? `juara-public-row rank-${f.juaraRank}` : "juara-public-row";
                         return (
@@ -316,7 +367,9 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
                             </div>
                             {isJuara ? (
                               <span className={`juara-public-label rank-${f.juaraRank}`}>
-                                {juaraLabel(kid, f.juaraRank as 1 | 2 | 3)}
+                                {/* juaraLabel forPublic=true (default) → no gender
+                                    suffix. Gender is shown in the meta line. */}
+                                {juaraLabel(f.kategoriId || kategoriIds[0], f.juaraRank as 1 | 2 | 3)}
                               </span>
                             ) : (
                               <span className="juara-public-label" style={{ background: "#F3F4F6", color: "#6B7280" }}>
@@ -329,12 +382,16 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
                     </div>
                   </div>
                 );
-              }) : null}
+              })}
             </div>
           </div>
         )}
 
-        {/* Peserta Terdaftar */}
+        {/* Peserta Terdaftar — grouped by PUBLIC NAME so k_anak_l + k_anak_p
+            share one "Anak" block instead of being split L vs P. The section
+            key from the master table (balita / anakL / anakP / dewasa) is
+            mapped to its public name; the first sub-section's color/icon
+            is reused for the merged block. */}
         <div className="info-section mt-3.5">
           <h3 className="text-[13px] font-bold mb-3 text-[#1F2937] flex items-center gap-2">
             <i className="fas fa-users text-primary"></i> Peserta Terdaftar
@@ -348,16 +405,47 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
             </div>
           ) : (
             <div className="space-y-4">
-              {groups.sections.map((sec) => (
-                <PesertaTable
-                  key={sec.key}
-                  title={sec.title}
-                  icon={SECTION_ICON[sec.key]}
-                  ageRange={sec.rangeLabel}
-                  color={sec.key}
-                  data={sec.peserta}
-                />
-              ))}
+              {(() => {
+                // Group sections by public name. For "Anak" (k_anak_l + k_anak_p)
+                // we combine the peserta arrays. We also combine ageRange (use
+                // the first sub-section's range — L and P share the same range).
+                const publicGroups = new Map<string, {
+                  title: string;
+                  icon: string;
+                  ageRange: string;
+                  color: DisplaySection["key"];
+                  data: { nama: string; umur: number }[];
+                }>();
+                for (const sec of groups.sections) {
+                  const publicName = publicKategoriName(
+                    sec.key === "balita" ? "k_balita" :
+                    sec.key === "anakL" ? "k_anak_l" :
+                    sec.key === "anakP" ? "k_anak_p" : "k_dewasa_p"
+                  );
+                  const existing = publicGroups.get(publicName);
+                  if (existing) {
+                    existing.data.push(...sec.peserta);
+                  } else {
+                    publicGroups.set(publicName, {
+                      title: publicName,
+                      icon: SECTION_ICON[sec.key],
+                      ageRange: sec.rangeLabel,
+                      color: sec.key,
+                      data: [...sec.peserta],
+                    });
+                  }
+                }
+                return Array.from(publicGroups.values()).map((g) => (
+                  <PesertaTable
+                    key={g.title}
+                    title={g.title}
+                    icon={g.icon}
+                    ageRange={g.ageRange}
+                    color={g.color}
+                    data={g.data}
+                  />
+                ));
+              })()}
             </div>
           )}
         </div>

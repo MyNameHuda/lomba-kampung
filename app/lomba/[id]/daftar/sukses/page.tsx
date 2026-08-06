@@ -1,4 +1,5 @@
 import { getPendaftarByNomor, getLombaById, getKategori, getSettings } from "@/lib/db";
+import { publicKategoriName } from "@/lib/format";
 import Link from "next/link";
 import PrintButton from "./print-button";
 
@@ -78,7 +79,7 @@ async function SuksesContent({ searchParamsPromise }: { searchParamsPromise: Pro
                   </div>
                   <div className="flex justify-between gap-2">
                     <span className="text-[#6B7280]">Kategori</span>
-                    <span className="font-semibold">{k?.nama} ({p.umur} th)</span>
+                    <span className="font-semibold">{k ? publicKategoriName(k.id) : ""} ({p.umur} th)</span>
                   </div>
                   <div className="flex justify-between gap-2">
                     <span className="text-[#6B7280]">Status</span>

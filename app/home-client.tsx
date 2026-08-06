@@ -4,47 +4,73 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import KatTag from "@/components/kat-tag";
 import { KAT_ICON, DEFAULT_KAT_ICON } from "@/lib/constants";
-import { formatTanggalLomba, lombaTimeStatus } from "@/lib/format";
+import { formatTanggalLomba, lombaTimeStatus, publicKategoriName, groupKategoriByPublicName } from "@/lib/format";
 import type { LombaSlim as Lomba, KategoriSlim as Kat } from "@/lib/types";
 
 export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; kategori: Kat[] }) {
+  // activeKat is a PUBLIC NAME (e.g. "Anak", "Balita", "Ibu-Ibu") — not a
+  // raw kategoriId. This collapses k_anak_l + k_anak_p into a single "Anak"
+  // filter chip on public pages. Admin still sees them separately.
   const [activeKat, setActiveKat] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
   // Build map for fast lookup
   const katMap = useMemo(() => new Map(kategori.map((k) => [k.id, k])), [kategori]);
 
-  // Count lomba per kategori (for chip badges) — only kats with at least 1 lomba
-  const countByKat = useMemo(() => {
+  // Count lomba per PUBLIC NAME (for chip badges) — k_anak_l + k_anak_p
+  // both map to "Anak" so they share one count. Only count lomba once per
+  // public name even if it has multiple sub-kategori in that group.
+  const countByPublicName = useMemo(() => {
     const m = new Map<string, number>();
     for (const l of lomba) {
+      const publicNames = new Set<string>();
       for (const kid of Array.isArray(l.kategoriEligible) ? l.kategoriEligible : []) {
-        m.set(kid, (m.get(kid) ?? 0) + 1);
+        publicNames.add(publicKategoriName(kid));
+      }
+      for (const name of publicNames) {
+        m.set(name, (m.get(name) ?? 0) + 1);
       }
     }
     return m;
   }, [lomba]);
 
-  // Only show kategori chips that have at least 1 lomba
-  const availableKats = useMemo(
-    () => kategori.filter((k) => (countByKat.get(k.id) ?? 0) > 0),
-    [kategori, countByKat]
-  );
+  // Only show public-name chips that have at least 1 lomba
+  // Preserve insertion order from the master kategori list (so the chip
+  // order is stable: Balita → Anak → Ibu-Ibu).
+  const availablePublicKats = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { publicName: string; sample: Kat }[] = [];
+    for (const k of kategori) {
+      const publicName = publicKategoriName(k.id);
+      if (seen.has(publicName)) continue;
+      seen.add(publicName);
+      if ((countByPublicName.get(publicName) ?? 0) > 0) {
+        // Use the first matching kat as the color/icon source for the chip.
+        out.push({ publicName, sample: k });
+      }
+    }
+    return out;
+  }, [kategori, countByPublicName]);
 
-  // Filter lomba by active kategori + search query
+  // Filter lomba by active public-name kategori + search query
   // (search matches nama, case-insensitive; kategori filter is AND-ed)
   const visibleLomba = useMemo(() => {
     const q = search.trim().toLowerCase();
     return lomba.filter((l) => {
-      if (activeKat && !(Array.isArray(l.kategoriEligible) && l.kategoriEligible.includes(activeKat))) {
-        return false;
+      if (activeKat) {
+        // activeKat is a public name; match if any eligible kategori
+        // maps to this public name (e.g. "Anak" matches both k_anak_l
+        // and k_anak_p).
+        const hasMatch = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : []).some(
+          (kid) => publicKategoriName(kid) === activeKat
+        );
+        if (!hasMatch) return false;
       }
       if (q && !l.nama.toLowerCase().includes(q)) return false;
       return true;
     });
   }, [lomba, activeKat, search]);
 
-  const activeKatName = activeKat ? katMap.get(activeKat)?.nama : null;
   const isFiltered = search.trim() !== "" || activeKat !== null;
 
   return (
@@ -85,14 +111,18 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
           >
             <i className="fas fa-trophy text-[10px]"></i> Semua ({lomba.length})
           </button>
-          {availableKats.map((k) => {
-            const isActive = activeKat === k.id;
-            const count = countByKat.get(k.id) ?? 0;
+          {/* Chips are keyed by PUBLIC NAME (e.g. "Anak" for both k_anak_l
+              and k_anak_p) so warga sees one combined filter. The chip's
+              color/icon comes from the first matching kategori in the
+              master list (e.g. k_anak_l's color for "Anak"). */}
+          {availablePublicKats.map(({ publicName, sample: k }) => {
+            const isActive = activeKat === publicName;
+            const count = countByPublicName.get(publicName) ?? 0;
             return (
               <button
-                key={k.id}
+                key={publicName}
                 type="button"
-                onClick={() => setActiveKat(isActive ? null : k.id)}
+                onClick={() => setActiveKat(isActive ? null : publicName)}
                 className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[12px] font-bold border-2 transition-all"
                 style={
                   isActive
@@ -120,7 +150,7 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
                   }
                 }}
               >
-                <span>{KAT_ICON[k.icon || "fa-user"] || DEFAULT_KAT_ICON}</span> {k.nama} ({count})
+                <span>{KAT_ICON[k.icon || "fa-user"] || DEFAULT_KAT_ICON}</span> {publicName} ({count})
               </button>
             );
           })}
@@ -132,7 +162,7 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
         <div className="flex items-center justify-between text-[12px] text-[#6B7280] mb-3">
           <span>
             Menampilkan <strong className="text-[#1F2937]">{visibleLomba.length}</strong> dari {lomba.length} lomba
-            {activeKatName && <span className="text-[#9CA3AF]"> · Kategori <strong>{activeKatName}</strong></span>}
+            {activeKat && <span className="text-[#9CA3AF]"> · Kategori <strong>{activeKat}</strong></span>}
           </span>
           <button
             type="button"
@@ -203,27 +233,46 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
                     <p className="text-[11px] text-[#6B7280] line-clamp-2 leading-relaxed break-words">{l.deskripsi}</p>
                   )}
                   {/* Tags + tanggal — stack vertical on mobile (avoid overflow),
-                      horizontal on sm+ when there's enough room. */}
+                      horizontal on sm+ when there's enough room. Grouped by
+                      PUBLIC NAME so k_anak_l + k_anak_p show as a single
+                      "Anak" row on public cards. Jadwal shown is the
+                      earliest across the collapsed group. */}
                   {eligibleKats.length > 0 && (
                     <div className="flex flex-col gap-1.5">
-                      {eligibleKats.map((k) => {
-                        const j = l.jadwalByKategori?.[k.id];
-                        const hasJadwal = j && j.tanggal != null;
+                      {groupKategoriByPublicName(
+                        (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : []).filter((kid) => !!katMap.get(kid))
+                      ).map(({ publicName, kategoriIds }) => {
+                        // Use the first eligible kat as the color/icon source
+                        // for the KatTag (any sub-kategori in the group shares
+                        // the public name; colors might differ slightly but
+                        // picking the first keeps it deterministic).
+                        const repKat = katMap.get(kategoriIds[0])!;
+                        // Pick the earliest tanggal across the group so we
+                        // show a single jadwal per public name. If any
+                        // sub-kategori in the group has a tanggal, use the
+                        // earliest one (most relevant for warga).
+                        const allJadwals = kategoriIds
+                          .map((kid) => l.jadwalByKategori?.[kid])
+                          .filter((j): j is { kategoriId: string; tanggal: number; jam: string | null } => !!j && j.tanggal != null);
+                        const earliestJadwal = allJadwals.length
+                          ? allJadwals.reduce((min, j) => (j.tanggal < min.tanggal ? j : min))
+                          : null;
+                        const hasJadwal = !!earliestJadwal;
                         return (
-                          <div key={k.id} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 sm:flex-wrap text-[10px]">
+                          <div key={publicName} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 sm:flex-wrap text-[10px]">
                             <KatTag
-                              nama={k.nama}
-                              colorBg={k.colorBg}
-                              colorText={k.colorText}
-                              colorBorder={k.colorBorder}
+                              nama={publicName}
+                              colorBg={repKat.colorBg}
+                              colorText={repKat.colorText}
+                              colorBorder={repKat.colorBorder}
                             />
                             {hasJadwal ? (
                               <span className="text-[10px] text-[#6B7280] flex items-center gap-1">
                                 <i className="far fa-calendar text-[10px] text-primary"></i>
                                 <span className="font-semibold text-[#374151]">
-                                  {formatTanggalLomba(j!.tanggal as number, "short")}
+                                  {formatTanggalLomba(earliestJadwal!.tanggal as number, "short")}
                                 </span>
-                                {j!.jam && <span className="text-[#9CA3AF]">· {j!.jam}</span>}
+                                {earliestJadwal!.jam && <span className="text-[#9CA3AF]">· {earliestJadwal!.jam}</span>}
                               </span>
                             ) : (
                               <span className="text-[10px] text-[#9CA3AF] italic">Belum dijadwalkan</span>

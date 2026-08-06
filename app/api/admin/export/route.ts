@@ -114,7 +114,7 @@ export async function GET() {
       lomba: l?.nama || "",
       status: p.status,
       finalist: p.isFinalist === 1 ? "Lolos" : p.isFinalist === 0 ? "Gugur" : "Pending",
-      juara: p.juaraRank ? juaraLabel(p.kategoriId, p.juaraRank) : "",
+      juara: p.juaraRank ? juaraLabel(p.kategoriId, p.juaraRank, false /* forPublic — keep gender suffix on admin XLSX */) : "",
       sumber: p.sumber,
       tanggal: new Date(p.createdAt * 1000).toISOString(),
     };

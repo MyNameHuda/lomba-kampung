@@ -547,7 +547,7 @@ function PendaftarCard({
     const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : "🥉";
     statusBadge = (
       <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: ["#FFD700", "#C0C0C0", "#CD7F32"][rank - 1], color: "white" }}>
-        {medal} {juaraLabel(kategoriId, rank)}
+        {medal} {juaraLabel(kategoriId, rank, false /* forPublic — keep gender suffix on admin */)}
       </span>
     );
   } else if (isLolos) {

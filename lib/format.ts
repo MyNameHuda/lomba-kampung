@@ -63,22 +63,61 @@ export function tsToUtcDateStr(ts: number): string {
   return new Date(ts * 1000).toISOString().slice(0, 10);
 }
 
+// =================== Public kategori display ===================
+// On public pages, we collapse k_anak_l + k_anak_p into a single "Anak"
+// category (the gender is stored per-pendaftar and shown in their profile).
+// Admin still sees them as separate kategori (k_anak_l / k_anak_p) for
+// clarity when picking Juara 1/2/3.
+//
+// If the admin ever renames a kategori, the public display keeps the
+// hard-coded public name intentionally — public labels are standardized.
+//
+//   k_balita    → "Balita"
+//   k_anak_l    → "Anak"   ┐ same public name (warga doesn't see L vs P)
+//   k_anak_p    → "Anak"   ┘
+//   k_dewasa_p  → "Ibu-Ibu"
+const KATEGORI_PUBLIC_NAME: Record<string, string> = {
+  k_balita: "Balita",
+  k_anak_l: "Anak",
+  k_anak_p: "Anak",
+  k_dewasa_p: "Ibu-Ibu",
+};
+
+export function publicKategoriName(kategoriId: string): string {
+  return KATEGORI_PUBLIC_NAME[kategoriId] ?? kategoriId;
+}
+
+/**
+ * Group a list of kategoriIds by their public name, preserving first-seen
+ * order. Returns a list of `{ publicName, kategoriIds }` pairs. Used to
+ * collapse L/P sub-kategori into a single section on public pages.
+ */
+export function groupKategoriByPublicName(kategoriIds: string[]): Array<{ publicName: string; kategoriIds: string[] }> {
+  const groups = new Map<string, string[]>();
+  for (const kid of kategoriIds) {
+    const name = publicKategoriName(kid);
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name)!.push(kid);
+  }
+  return Array.from(groups.entries()).map(([publicName, kategoriIds]) => ({ publicName, kategoriIds }));
+}
+
 // =================== Juara label helper ===================
-// Public Juara 1/2/3 are split per-(lomba, kategori). When a lomba has both
-// `k_anak_l` and `k_anak_p` eligible, the same rank lives in two different
-// sections — warga needs to know which is which without reading the section
-// header. So we append "(Laki-laki)" / "(Perempuan)" for the L/P split.
+// For public display: "Juara 1" (no gender suffix) because k_anak_l +
+// k_anak_p are collapsed into a single "Anak" section. Gender is shown
+// in the winner's profile (jenis_kelamin field in the meta line).
 //
-// For other kategori (Balita single, Remaja mixed, Ibu-Ibu only female), the
-// section header already conveys the gender context — no suffix needed.
-//
-// Used in: public detail page, admin Juara picker, XLSX Juara sheet.
+// For admin (juara picker + XLSX export): keep "(Laki-laki)" / "(Perempuan)"
+// suffix for k_anak_l / k_anak_p so the admin can tell which gender won.
 //
 // @param kategoriId  the section's kategori id
 // @param rank        1, 2, or 3
-// @returns "Juara 1 (Laki-laki)" for k_anak_l, "Juara 1 (Perempuan)" for
-//          k_anak_p, "Juara 1" otherwise.
-export function juaraLabel(kategoriId: string, rank: 1 | 2 | 3): string {
+// @param forPublic   true (default) = public display, false = admin
+// @returns "Juara 1" on public for any kategori; "Juara 1 (Laki-laki)" /
+//          "Juara 1 (Perempuan)" on admin for k_anak_l / k_anak_p; "Juara 1"
+//          on admin for other kategori.
+export function juaraLabel(kategoriId: string, rank: 1 | 2 | 3, forPublic: boolean = true): string {
+  if (forPublic) return `Juara ${rank}`;
   if (kategoriId === "k_anak_l") return `Juara ${rank} (Laki-laki)`;
   if (kategoriId === "k_anak_p") return `Juara ${rank} (Perempuan)`;
   return `Juara ${rank}`;
