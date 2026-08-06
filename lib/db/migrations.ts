@@ -178,6 +178,9 @@ export async function ensurePendaftaranDibukaColumn(): Promise<void> {
 export async function ensureGenderSplitKategori(): Promise<void> {
   // ===== Step 1: ensure new k_balita / k_anak_l / k_anak_p exist =====
   // Cheap PK-lookup → no-op if already present.
+  //
+  // k_balita: only inserted if NOT present. If the user has already
+  // customized their k_balita (age, color, icon), we leave it alone.
   const kBalita = await get<{ id: string }>("SELECT id FROM kategori WHERE id = 'k_balita'");
   if (!kBalita) {
     await getClient().execute({
@@ -186,22 +189,22 @@ export async function ensureGenderSplitKategori(): Promise<void> {
       args: ["#FCE7F3", "#9D174D", "#FBCFE8"],
     });
   }
-  const kAnakL = await get<{ id: string }>("SELECT id FROM kategori WHERE id = 'k_anak_l'");
-  if (!kAnakL) {
-    await getClient().execute({
-      sql: `INSERT INTO kategori (id, nama, icon, min, max, urutan, auto_age, color_bg, color_text, color_border)
-            VALUES ('k_anak_l', 'Anak (Laki-laki)', 'fa-child', 5, 11, 1, 1, ?, ?, ?)`,
-      args: ["#DBEAFE", "#1E40AF", "#BFDBFE"],
-    });
-  }
-  const kAnakP = await get<{ id: string }>("SELECT id FROM kategori WHERE id = 'k_anak_p'");
-  if (!kAnakP) {
-    await getClient().execute({
-      sql: `INSERT INTO kategori (id, nama, icon, min, max, urutan, auto_age, color_bg, color_text, color_border)
-            VALUES ('k_anak_p', 'Anak (Perempuan)', 'fa-child-dress', 5, 11, 2, 1, ?, ?, ?)`,
-      args: ["#FCE7F3", "#9D174D", "#FBCFE8"],
-    });
-  }
+  // k_anak_l / k_anak_p: COPY from the existing k_anak row (preserving the
+  // user's age range, color, icon) and only override the id + nama. If k_anak
+  // doesn't exist (e.g. on a fresh DB that's already been seeded with the v2
+  // schema), the SELECT returns 0 rows and the INSERT OR IGNORE is a no-op.
+  await getClient().execute({
+    sql: `INSERT OR IGNORE INTO kategori (id, nama, icon, min, max, urutan, auto_age, color_bg, color_text, color_border)
+          SELECT 'k_anak_l', 'Anak (Laki-laki)', icon, min, max, urutan, auto_age, color_bg, color_text, color_border
+          FROM kategori WHERE id = 'k_anak'`,
+    args: [],
+  });
+  await getClient().execute({
+    sql: `INSERT OR IGNORE INTO kategori (id, nama, icon, min, max, urutan, auto_age, color_bg, color_text, color_border)
+          SELECT 'k_anak_p', 'Anak (Perempuan)', icon, min, max, urutan, auto_age, color_bg, color_text, color_border
+          FROM kategori WHERE id = 'k_anak'`,
+    args: [],
+  });
 
   // ===== Step 2: create k_dewasa_p from k_dewasa (only if v1 row exists) =====
   // We can't just UPDATE the id (PRIMARY KEY), so we INSERT a new row from
