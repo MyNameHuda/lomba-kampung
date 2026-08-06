@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useNotify } from "@/components/notify-provider";
 import KatTag from "@/components/kat-tag";
 import LombaModal, { type LombaFormData, type JadwalInput } from "./lomba-modal";
+import { formatTanggalLomba } from "@/lib/format";
 import type { Pj, PjInput, KategoriSlim as Kat } from "@/lib/types";
 
 // Lomba row shape (server-rendered + PJ populated).
@@ -160,10 +161,9 @@ export default function LombaClient({
           </thead>
           <tbody>
             {items.map((l) => {
-              const tags = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
+              const eligibleKats = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
                 .map((kid) => kats.find((k) => k.id === kid))
-                .filter(Boolean)
-                .map((k) => <KatTag key={k!.id} nama={k!.nama} colorBg={k!.colorBg} colorText={k!.colorText} colorBorder={k!.colorBorder} />);
+                .filter((k): k is NonNullable<typeof k> => !!k);
               return (
                 <tr key={l.id}>
                   <td className="cell-primary" data-label="Lomba">
@@ -175,10 +175,38 @@ export default function LombaClient({
                       </div>
                     </div>
                   </td>
-                  <td data-label="Kategori"><div className="flex flex-wrap gap-1">{tags}</div></td>
+                  <td data-label="Kategori">
+                    <div className="flex flex-col gap-1.5">
+                      {eligibleKats.map((k) => {
+                        const j = l.jadwalByKategori?.[k.id];
+                        const hasJadwal = j && (j.tanggal != null || j.jam);
+                        return (
+                          <div key={k.id} className="flex flex-col gap-0.5 leading-snug">
+                            <KatTag
+                              nama={k.nama}
+                              colorBg={k.colorBg}
+                              colorText={k.colorText}
+                              colorBorder={k.colorBorder}
+                            />
+                            {hasJadwal ? (
+                              <div className="text-[10px] text-[#6B7280] flex items-center gap-1 pl-1">
+                                <i className="far fa-calendar text-[10px] text-primary"></i>
+                                <span className="font-semibold text-[#374151]">
+                                  {j!.tanggal != null ? formatTanggalLomba(j!.tanggal as number, "short") : "—"}
+                                </span>
+                                {j!.jam && <span className="text-[#9CA3AF]">· {j!.jam}</span>}
+                              </div>
+                            ) : (
+                              <div className="text-[10px] text-[#9CA3AF] pl-1 italic">Belum dijadwalkan</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </td>
                   <td data-label="Peserta">
-                    <div className="flex flex-col gap-0.5 leading-snug">
-                      <div className="font-semibold">{counts[l.id] || 0}</div>
+                    <div className="flex flex-col gap-0.5 leading-snug whitespace-nowrap">
+                      <div className="font-semibold">{counts[l.id] || 0} <span className="text-[10px] font-normal text-[#9CA3AF]">pendaftar</span></div>
                       <div className="text-[10px] text-[#9CA3AF]"><i className="fas fa-infinity"></i> Tanpa batas</div>
                     </div>
                   </td>
