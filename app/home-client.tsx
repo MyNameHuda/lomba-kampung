@@ -124,11 +124,17 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
                   <h3 className="flex-1 min-w-0">{l.nama}</h3>
                   {(() => {
                     const ts = lombaTimeStatus(l.jadwalByKategori, l.kategoriEligible);
+                    // No time info + no pendaftar → neutral "Belum Mulai" pill.
+                    // (On the detail page this is a separate "belum-mulai" PublicStatus,
+                    // but on the card we keep it simple — single pill.)
+                    const noPendaftar = (l.count ?? 0) === 0;
                     const cfg: Record<string, { label: string; bg: string; fg: string }> = {
                       "akan-datang": { label: "Akan Datang", bg: "#8B5CF6", fg: "#FFFFFF" },
                       "sedang-berlangsung": { label: "Berlangsung", bg: "#FBBF24", fg: "#92400E" },
                       "lewat-jadwal": { label: "Lewat", bg: "#6B7280", fg: "#FFFFFF" },
-                      "belum-dijadwalkan": { label: "", bg: "", fg: "" },
+                      "belum-dijadwalkan": noPendaftar
+                        ? { label: "Belum Mulai", bg: "#E5E7EB", fg: "#374151" }
+                        : { label: "Sedang Berlangsung", bg: "#FBBF24", fg: "#92400E" },
                     };
                     const c = cfg[ts];
                     if (!c || !c.label) return null;
