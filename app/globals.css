@@ -649,9 +649,12 @@ html, body { overflow-x: clip; max-width: 100vw; }
 /* Form body centered on desktop with a comfortable reading width.
    On mobile, fills the viewport as before. */
 .form-body { flex: 1; padding: 24px 20px 120px; line-height: 1.5; max-width: 600px; width: 100%; margin: 0 auto; }
-.form-footer { position: sticky; bottom: 0; background: white; padding: 14px 20px; border-top: 1px solid #E5E7EB; z-index: 10; }
+.form-footer { position: sticky; bottom: 0; background: white; padding: 14px 20px; border-top: 1px solid #E5E7EB; z-index: 10; width: 100%; }
 /* On desktop, cap the form footer too so the "Kirim Pendaftaran" button
-   stays aligned with the form content above. */
+   stays aligned with the form content above. width:100% in the base
+   rule is critical — without it, sticky element without explicit width
+   shrinks to its content (the button itself) and anchors right instead
+   of spanning the 600px form width. */
 @media (min-width: 640px) {
   .form-footer { max-width: 600px; margin: 0 auto; left: 0; right: 0; }
 }
