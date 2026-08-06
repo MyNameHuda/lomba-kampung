@@ -135,3 +135,16 @@ export async function ensureLombaJadwalTable(): Promise<void> {
     args: [],
   });
 }
+
+// Self-healing: ensure lomba.pendaftaran_dibuka column exists.
+// Idempotent — safe to call on every DB access. Returns early if column
+// already present (PRAGMA table_info check).
+export async function ensurePendaftaranDibukaColumn(): Promise<void> {
+  const cols = await all<{ name: string }>("PRAGMA table_info(lomba)");
+  if (cols.some((c) => c.name === "pendaftaran_dibuka")) return;
+  // Default 1 = open. NOT NULL with DEFAULT 1 so existing rows get a sane value.
+  await getClient().execute({
+    sql: "ALTER TABLE lomba ADD COLUMN pendaftaran_dibuka INTEGER NOT NULL DEFAULT 1",
+    args: [],
+  });
+}

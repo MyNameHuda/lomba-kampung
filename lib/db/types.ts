@@ -41,6 +41,11 @@ export type Lomba = {
   status: LombaStatus;
   urutan: number;
   createdAt: number;
+  // Whether public registration is open. Independent of `status` (lomba lifecycle).
+  // Admin can close this manually while keeping the lomba visible (e.g. for
+  // kualifikasi phase). Default true on new lomba. Admin input-manual always works
+  // regardless of this flag.
+  pendaftaranDibuka: boolean;
   // Stage system v3 — kualifikasi phase config (DEPRECATED in v4).
   // Kept for backward compat with existing 6 lomba. Not used in v4 logic
   // (finalis count is now decided per-pendaftar via is_finalist).

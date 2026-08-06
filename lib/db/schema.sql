@@ -35,6 +35,11 @@ CREATE TABLE IF NOT EXISTS lomba (
   pj_nama TEXT NOT NULL DEFAULT 'Panitia',
   pj_kontak TEXT,
   status TEXT NOT NULL DEFAULT 'aktif',
+  -- Whether public registration is open. Independent of `status` (which is the
+  -- overall lomba lifecycle: draft/aktif/selesai). Default 1 (open) for new lomba.
+  -- Admin can toggle this to manually close registration while keeping the lomba
+  -- visible (e.g. for kualifikasi phase). Admin input-manual always works.
+  pendaftaran_dibuka INTEGER NOT NULL DEFAULT 1,
   urutan INTEGER NOT NULL DEFAULT 0,
   -- Stage system v3 — kualifikasi phase config.
   -- finalis_count: how many finalists per kategori advance from kualifikasi to

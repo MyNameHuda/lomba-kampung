@@ -20,7 +20,7 @@ export const toCamel = <T>(row: DbRow | undefined): T | null => {
       }
       if (!Array.isArray(val)) val = [];
     }
-    if (camelKey === "hadir" || camelKey === "autoAge") {
+    if (camelKey === "hadir" || camelKey === "autoAge" || camelKey === "pendaftaranDibuka") {
       val = !!val;
     }
     out[camelKey] = val;

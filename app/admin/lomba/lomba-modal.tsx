@@ -26,6 +26,10 @@ export type LombaFormData = {
   // Stage system v3 — kualifikasi config. How many finalists per kategori
   // advance from kualifikasi to final (range 1-50, default 5).
   finalisCount: number;
+  // Public registration toggle. Independent of `status` (lomba lifecycle).
+  // Admin can close this while keeping lomba visible (e.g. for kualifikasi
+  // phase). Admin input-manual always works regardless.
+  pendaftaranDibuka: boolean;
   // Per-kategori jadwal (loaded from editing.jadwalByKategori, sent back as
   // jadwalList on save). Server-side this lives in `lomba_jadwal` table.
   jadwalByKategori?: Record<string, JadwalInput>;
@@ -42,6 +46,7 @@ const EMPTY_LOMBA: Omit<LombaFormData, "id"> = {
   status: "aktif",
   urutan: 0,
   finalisCount: 5,
+  pendaftaranDibuka: true,
 };
 
 const MAX_PJ_PER_KAT = APP_CONFIG.MAX_PJ_PER_KAT;
@@ -83,6 +88,7 @@ export default function LombaModal({
   const [status, setStatus] = useState<LombaFormData["status"]>(editing?.status || "aktif");
   const [urutan, setUrutan] = useState(editing?.urutan ?? nextUrutan);
   const [finalisCount, setFinalisCount] = useState<number>(editing?.finalisCount ?? 5);
+  const [pendaftaranDibuka, setPendaftaranDibuka] = useState<boolean>(editing?.pendaftaranDibuka ?? true);
   // Per-kategori jadwal (tanggal + jam). Empty Record = no jadwal set.
   const [jadwalByKategori, setJadwalByKategori] = useState<Record<string, JadwalInput>>(() => {
     if (!editing?.jadwalByKategori) return {};
@@ -228,6 +234,7 @@ export default function LombaModal({
         status,
         urutan,
         finalisCount,
+        pendaftaranDibuka,
       });
     } finally {
       setSaving(false);
@@ -404,6 +411,33 @@ export default function LombaModal({
               <label className="label">Urutan Tampil</label>
               <input type="number" className="input" min={0} value={urutan} onChange={(e) => setUrutan(Number(e.target.value))} />
             </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-4 p-3.5 border border-[#E5E7EB] rounded-lg bg-[#F9FAFB]">
+            <div>
+              <div className="text-[13px] font-semibold flex items-center gap-2">
+                <i className={`fas ${pendaftaranDibuka ? "fa-toggle-on text-primary" : "fa-toggle-off text-[#9CA3AF]"}`}></i>
+                Pendaftaran Publik
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${pendaftaranDibuka ? "bg-[#DCFCE7] text-[#15803D]" : "bg-[#FEE2E2] text-[#991B1B]"}`}>
+                  {pendaftaranDibuka ? "DIBUKA" : "DITUTUP"}
+                </span>
+              </div>
+              <div className="text-[11px] text-[#6B7280] mt-1">
+                {pendaftaranDibuka
+                  ? "Warga bisa mendaftar via form publik. Input manual admin tetap bisa."
+                  : "Form publik tertutup. Input manual admin tetap bisa."}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPendaftaranDibuka((v) => !v)}
+              className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${pendaftaranDibuka ? "bg-primary" : "bg-[#D1D5DB]"}`}
+              title={pendaftaranDibuka ? "Tutup pendaftaran" : "Buka pendaftaran"}
+            >
+              <span
+                className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${pendaftaranDibuka ? "translate-x-6" : "translate-x-0.5"}`}
+              />
+            </button>
           </div>
 
           {err && (

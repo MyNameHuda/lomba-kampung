@@ -115,3 +115,66 @@ export function formatTanggalLomba(
     year: "numeric",
   });
 }
+
+/**
+ * Get today's date as "YYYY-MM-DD" in Asia/Jakarta timezone.
+ * Used to compare against lomba's per-kategori tanggal for time-based status.
+ */
+export function todayInJakarta(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+/**
+ * Compare a unix-seconds tanggal (interpreted as calendar day in Asia/Jakarta)
+ * against today in Asia/Jakarta. Returns:
+ *   - "future"  if tanggal is strictly after today
+ *   - "today"   if tanggal is today
+ *   - "past"    if tanggal is strictly before today
+ */
+export function compareTglToToday(
+  ts: number,
+  today: string = todayInJakarta()
+): "future" | "today" | "past" {
+  const tgl = formatTanggalLomba(ts, "iso");
+  if (tgl > today) return "future";
+  if (tgl === today) return "today";
+  return "past";
+}
+
+/**
+ * Time-based status derived from per-kategori jadwal. Independent of
+ * `lomba.status` (lomba lifecycle) — this is a derived "where are we
+ * in the calendar" view for the public badge.
+ *
+ *   - "akan-datang"        → at least one kategori has tanggal in the future
+ *   - "sedang-berlangsung" → at least one kategori has tanggal == today
+ *   - "lewat-jadwal"       → all tanggal in the past (admin hasn't marked Selesai yet)
+ *   - "belum-dijadwalkan"  → no tanggal set on any eligible kategori
+ */
+export type LombaTimeStatus = "akan-datang" | "sedang-berlangsung" | "lewat-jadwal" | "belum-dijadwalkan";
+
+export function lombaTimeStatus(
+  jadwalByKategori: Record<string, { tanggal: number | null; jam: string | null } | undefined> | undefined,
+  eligibleKategori: string[],
+  today: string = todayInJakarta()
+): LombaTimeStatus {
+  const jadwals = eligibleKategori
+    .map((kid) => jadwalByKategori?.[kid])
+    .filter((j): j is { tanggal: number; jam: string | null } => !!j && j.tanggal != null);
+  if (jadwals.length === 0) return "belum-dijadwalkan";
+  let todayCount = 0;
+  let futureCount = 0;
+  for (const j of jadwals) {
+    const cmp = compareTglToToday(j.tanggal, today);
+    if (cmp === "today") todayCount++;
+    else if (cmp === "future") futureCount++;
+  }
+  if (todayCount > 0) return "sedang-berlangsung";
+  if (futureCount > 0) return "akan-datang";
+  return "lewat-jadwal";
+}

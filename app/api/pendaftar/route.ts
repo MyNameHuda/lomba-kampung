@@ -21,6 +21,12 @@ export async function POST(req: Request) {
     if (!l || l.status !== "aktif") {
       return NextResponse.json({ error: "Lomba tidak ditemukan" }, { status: 404 });
     }
+    if (!l.pendaftaranDibuka) {
+      return NextResponse.json(
+        { error: "Pendaftaran untuk lomba ini sudah ditutup oleh panitia" },
+        { status: 403 }
+      );
+    }
     if (!l.kategoriEligible.includes(data.kategoriId)) {
       return NextResponse.json({ error: "Kategori tidak eligible untuk lomba ini" }, { status: 400 });
     }

@@ -31,6 +31,10 @@ const lombaSchema = z.object({
   // via PATCH or leave empty if not yet decided.
   jadwalList: z.array(jadwalSchema).max(10).optional(),
   status: z.enum(["draft", "aktif", "selesai"]).default("aktif"),
+  // Whether public registration is open. Default true on create.
+  // Admin can toggle off to close registration while keeping lomba visible.
+  // Admin input-manual always works regardless of this flag.
+  pendaftaranDibuka: z.boolean().default(true),
   urutan: z.number().int().min(0).default(0),
   // v4: finalisCount removed — admin decides finalists per-pendaftar (Loloskan/Gugur).
   // Kept as optional for back-compat with existing payloads, but ignored.
@@ -96,6 +100,7 @@ export async function POST(req: Request) {
       // v4: phase removed, finalisCount ignored (column still exists for back-compat)
       finalisCount: 5,
       phase: null,
+      pendaftaranDibuka: data.pendaftaranDibuka,
     });
     await setLombaKategori(id, data.pjList.map((p) => ({
       kategoriId: p.kategoriId,

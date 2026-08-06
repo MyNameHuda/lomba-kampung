@@ -26,6 +26,8 @@ const lombaSchema = z.object({
   // Jadwal pelaksanaan per (lomba, kategori). Empty array = clear all jadwal.
   jadwalList: z.array(jadwalSchema).max(10).optional(),
   status: z.enum(["draft", "aktif", "selesai"]).optional(),
+  // Toggle public registration open/closed. Admin input-manual always works.
+  pendaftaranDibuka: z.boolean().optional(),
   urutan: z.number().int().min(0).optional(),
   // v4: finalisCount removed from active use. Kept optional for back-compat
   // with old payloads (silently ignored).

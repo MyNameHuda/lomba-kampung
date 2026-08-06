@@ -16,6 +16,9 @@ type Lomba = LombaFormData & {
   id: number;
   pjByKategori: Record<string, Pj[]>;
   jadwalByKategori: Record<string, JadwalInput>;
+  // Server-side derived: from lomba.pendaftaran_dibuka column
+  // (always present in the row from the server, but we already have it
+  // in LombaFormData so we just rely on that). The type is already included.
 };
 
 export default function LombaClient({
@@ -78,6 +81,7 @@ export default function LombaClient({
           status: data.status,
           urutan: data.urutan,
           finalisCount: data.finalisCount,
+          pendaftaranDibuka: data.pendaftaranDibuka,
           pjByKategori: pjMap,
           jadwalByKategori: {},
         };

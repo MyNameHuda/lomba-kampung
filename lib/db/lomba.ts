@@ -3,7 +3,13 @@
 // enabled via the (lomba_id, kategori_id, urutan) composite PK — see migrations.ts).
 import { all, get, getClient, run, type DbRow } from "./client";
 import { toCamel, toCamelAll } from "./internal";
-import { ensurePjMultiSupport, ensureKualifikasiColumns, ensureKualifikasiV4Columns, ensureLombaJadwalTable } from "./migrations";
+import {
+  ensurePjMultiSupport,
+  ensureKualifikasiColumns,
+  ensureKualifikasiV4Columns,
+  ensureLombaJadwalTable,
+  ensurePendaftaranDibukaColumn,
+} from "./migrations";
 import type { Lomba, LombaKategoriInput, Pj } from "./types";
 
 // Load pjByKategori for many lomba at once (avoid N+1).
@@ -89,7 +95,7 @@ function attachJadwal<T extends { id: number }>(
 
 // =================== Read ===================
 export async function getLomba(includeInactive = false): Promise<Lomba[]> {
-  await ensureKualifikasiColumns();
+  await Promise.all([ensureKualifikasiColumns(), ensurePendaftaranDibukaColumn()]);
   const sql = includeInactive
     ? "SELECT * FROM lomba ORDER BY urutan"
     : "SELECT * FROM lomba WHERE status = 'aktif' ORDER BY urutan";
@@ -99,7 +105,7 @@ export async function getLomba(includeInactive = false): Promise<Lomba[]> {
 }
 
 export async function getLombaById(id: number): Promise<Lomba | null> {
-  await ensureKualifikasiColumns();
+  await Promise.all([ensureKualifikasiColumns(), ensurePendaftaranDibukaColumn()]);
   const row = toCamel<Lomba>(await get<DbRow>("SELECT * FROM lomba WHERE id = ?", id));
   if (!row) return null;
   const [pjBulk, tutupBulk, jadwalBulk] = await Promise.all([loadPjBulk(), loadKategoriTutupBulk(), loadJadwalBulk()]);
@@ -130,10 +136,10 @@ export async function getLombaWithCount(): Promise<{ id: number; nama: string; e
 // jadwalByKategori — the last three are auto-derived via loadPjBulk / loadKategoriTutupBulk
 // / loadJadwalBulk on read).
 export async function createLomba(data: Omit<Lomba, "id" | "createdAt" | "pjByKategori" | "kategoriTutupAt" | "jadwalByKategori">): Promise<number> {
-  await ensureKualifikasiColumns();
+  await Promise.all([ensureKualifikasiColumns(), ensurePendaftaranDibukaColumn()]);
   const result = await run(
-    `INSERT INTO lomba (nama, emoji, deskripsi, syarat, kategori_eligible, status, urutan, finalis_count, phase)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO lomba (nama, emoji, deskripsi, syarat, kategori_eligible, status, urutan, finalis_count, phase, pendaftaran_dibuka)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     data.nama,
     data.emoji,
     data.deskripsi,
@@ -142,7 +148,8 @@ export async function createLomba(data: Omit<Lomba, "id" | "createdAt" | "pjByKa
     data.status,
     data.urutan,
     data.finalisCount,
-    data.phase
+    data.phase,
+    data.pendaftaranDibuka ? 1 : 0
   );
   return Number(result.lastInsertRowid);
 }
@@ -174,6 +181,7 @@ export async function updateLomba(id: number, updates: Partial<Omit<Lomba, "id" 
   // a JSON object (per-kategori Tutup state) that should only be written via
   // `tutupKualifikasiKategori` / `bukaKualifikasiKategori`. Letting callers
   // write arbitrary text here would corrupt the JSON and break v4 phase logic.
+  await ensurePendaftaranDibukaColumn();
   const map: Record<string, string> = {
     nama: "nama",
     emoji: "emoji",
@@ -181,12 +189,14 @@ export async function updateLomba(id: number, updates: Partial<Omit<Lomba, "id" 
     status: "status",
     urutan: "urutan",
     finalisCount: "finalis_count",
+    pendaftaranDibuka: "pendaftaran_dibuka",
   };
   const sets: string[] = [];
   const vals: (string | number | null)[] = [];
   for (const [k, v] of Object.entries(updates)) {
     if (k === "syarat") { sets.push("syarat = ?"); vals.push(JSON.stringify(v)); }
     else if (k === "kategoriEligible") { sets.push("kategori_eligible = ?"); vals.push(JSON.stringify(v)); }
+    else if (k === "pendaftaranDibuka") { sets.push("pendaftaran_dibuka = ?"); vals.push(v ? 1 : 0); }
     else if (map[k]) { sets.push(`${map[k]} = ?`); vals.push(v as string | number | null); }
   }
   if (sets.length > 0) {
