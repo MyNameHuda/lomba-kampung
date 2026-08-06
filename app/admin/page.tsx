@@ -68,10 +68,10 @@ export default async function DashboardPage() {
           <div className="qicon"><i className="fas fa-clipboard-check"></i></div>
           <div className="qlbl">Tandai Hadir</div>
         </Link>
-        <Link href="#" className="quick-tile info">
+        <a href="/api/admin/export" download className="quick-tile info">
           <div className="qicon"><i className="fas fa-file-excel"></i></div>
           <div className="qlbl">Export Excel</div>
-        </Link>
+        </a>
         <Link href="/admin/pengaturan" className="quick-tile">
           <div className="qicon" style={{ background: "#F9FAFB", color: "#6B7280" }}><i className="fas fa-gear"></i></div>
           <div className="qlbl">Pengaturan</div>
