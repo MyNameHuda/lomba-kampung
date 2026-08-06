@@ -416,7 +416,7 @@ export default function LombaModal({
           <div className="flex items-center justify-between gap-4 p-3.5 border border-[#E5E7EB] rounded-lg bg-[#F9FAFB]">
             <div>
               <div className="text-[13px] font-semibold flex items-center gap-2">
-                <i className={`fas ${pendaftaranDibuka ? "fa-toggle-on text-primary" : "fa-toggle-off text-[#9CA3AF]"}`}></i>
+                <i className={`fas ${pendaftaranDibuka ? "fa-toggle-on text-[#22C55E]" : "fa-toggle-off text-[#9CA3AF]"}`}></i>
                 Pendaftaran Publik
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${pendaftaranDibuka ? "bg-[#DCFCE7] text-[#15803D]" : "bg-[#FEE2E2] text-[#991B1B]"}`}>
                   {pendaftaranDibuka ? "DIBUKA" : "DITUTUP"}
@@ -431,11 +431,12 @@ export default function LombaModal({
             <button
               type="button"
               onClick={() => setPendaftaranDibuka((v) => !v)}
-              className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${pendaftaranDibuka ? "bg-primary" : "bg-[#D1D5DB]"}`}
+              className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${pendaftaranDibuka ? "bg-[#22C55E]" : "bg-[#D1D5DB]"}`}
               title={pendaftaranDibuka ? "Tutup pendaftaran" : "Buka pendaftaran"}
+              aria-pressed={pendaftaranDibuka}
             >
               <span
-                className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${pendaftaranDibuka ? "translate-x-6" : "translate-x-0.5"}`}
+                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${pendaftaranDibuka ? "translate-x-6" : "translate-x-0"}`}
               />
             </button>
           </div>
