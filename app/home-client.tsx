@@ -259,7 +259,7 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
                           : null;
                         const hasJadwal = !!earliestJadwal;
                         return (
-                          <div key={publicName} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 sm:flex-wrap text-[10px]">
+                          <div key={publicName} className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2 sm:flex-wrap text-[10px]">
                             <KatTag
                               nama={publicName}
                               colorBg={repKat.colorBg}
