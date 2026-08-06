@@ -200,16 +200,17 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
                     )}
                   </div>
                   {l.deskripsi && (
-                    <p className="text-[11px] text-[#6B7280] line-clamp-2 leading-relaxed">{l.deskripsi}</p>
+                    <p className="text-[11px] text-[#6B7280] line-clamp-2 leading-relaxed break-words">{l.deskripsi}</p>
                   )}
-                  {/* Tags + tanggal — compact horizontal layout for grid cards */}
+                  {/* Tags + tanggal — stack vertical on mobile (avoid overflow),
+                      horizontal on sm+ when there's enough room. */}
                   {eligibleKats.length > 0 && (
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1.5">
                       {eligibleKats.map((k) => {
                         const j = l.jadwalByKategori?.[k.id];
                         const hasJadwal = j && j.tanggal != null;
                         return (
-                          <div key={k.id} className="flex items-center gap-2 flex-wrap text-[10px]">
+                          <div key={k.id} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 sm:flex-wrap text-[10px]">
                             <KatTag
                               nama={k.nama}
                               colorBg={k.colorBg}

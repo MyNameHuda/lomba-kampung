@@ -43,18 +43,18 @@ export default async function PublicHome() {
     <div className="mobile-page">
       <header className="app-header">
         <div className="header-content header-content-wide">
-          <div className="logo">
+          <div className="logo flex-1 min-w-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.webp" alt="Logo IPEKA" className="w-7 h-7 rounded-full object-cover bg-white/10" />
-            <span>{cfg?.appName || "Lomba Kampung"}</span>
+            <img src="/logo.webp" alt="Logo IPEKA" className="w-7 h-7 rounded-full object-cover bg-white/10 flex-shrink-0" />
+            <span className="truncate min-w-0">{cfg?.appName || "Lomba Kampung"}</span>
           </div>
           {isAdmin ? (
-            <Link href="/admin" className="text-sm font-semibold bg-white/20 px-3 py-1.5 rounded-full flex items-center gap-1.5 no-underline text-white">
+            <Link href="/admin" className="ml-auto text-sm font-semibold bg-white/20 px-3 py-1.5 rounded-full flex items-center gap-1.5 no-underline text-white flex-shrink-0">
               <i className="fas fa-gauge-high"></i>
               <span className="hidden sm:inline">Admin</span>
             </Link>
           ) : (
-            <Link href="/admin/login" className="text-sm opacity-80 text-white" title="Login Admin" aria-label="Login Admin">
+            <Link href="/admin/login" className="ml-auto text-sm opacity-80 text-white flex-shrink-0" title="Login Admin" aria-label="Login Admin">
               <i className="fas fa-user-shield"></i>
             </Link>
           )}

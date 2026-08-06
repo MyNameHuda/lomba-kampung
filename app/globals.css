@@ -618,7 +618,7 @@
 @media (min-width: 768px) {
   .lomba-icon { width: 60px; height: 60px; border-radius: 12px; font-size: 28px; }
 }
-.lomba-info { flex: 1; min-width: 0; }
+.lomba-info { flex: 1; min-width: 0; overflow: hidden; }
 .lomba-info h3 { font-size: 14px; font-weight: 700; margin-bottom: 6px; line-height: 1.3; }
 @media (min-width: 768px) {
   .lomba-info h3 { font-size: 15px; }
