@@ -280,13 +280,15 @@ export default function DaftarForm({ lomba, kategori }: { lomba: Lomba; kategori
             <i className="fas fa-exclamation-triangle"></i> {error}
           </div>
         )}
-      </main>
 
-      <div className="form-footer">
+        {/* Submit button — inline below Jenis Kelamin (not sticky at
+            bottom). Sticky CTA was causing desktop width bug AND warga
+            shouldn't have to scroll back up to find the form's primary
+            action. Form is short (3 steps), scroll is minimal. */}
         <button
           onClick={submit}
           disabled={submitting}
-          className="btn btn-primary btn-block disabled:opacity-60"
+          className="btn btn-primary btn-block disabled:opacity-60 mt-2"
         >
           {submitting ? (
             <><i className="fas fa-spinner fa-spin"></i> Mengirim...</>
@@ -294,7 +296,7 @@ export default function DaftarForm({ lomba, kategori }: { lomba: Lomba; kategori
             <><i className="fas fa-paper-plane"></i> Kirim Pendaftaran</>
           )}
         </button>
-      </div>
+      </main>
     </div>
   );
 }
