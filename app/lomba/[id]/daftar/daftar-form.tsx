@@ -145,10 +145,12 @@ export default function DaftarForm({ lomba, kategori }: { lomba: Lomba; kategori
   return (
     <div className="form-page">
       <header className="form-header">
-        <Link href={`/lomba/${lomba.id}`} className="w-8 h-8 rounded-full bg-white/20 text-white flex items-center justify-center">
-          <i className="fas fa-arrow-left"></i>
-        </Link>
-        <h2 className="text-base font-bold">Form Pendaftaran</h2>
+        <div className="header-content">
+          <Link href={`/lomba/${lomba.id}`} className="w-8 h-8 rounded-full bg-white/20 text-white flex items-center justify-center" aria-label="Kembali ke detail lomba">
+            <i className="fas fa-arrow-left"></i>
+          </Link>
+          <h2 className="text-base font-bold">Form Pendaftaran</h2>
+        </div>
       </header>
 
       <main className="form-body">

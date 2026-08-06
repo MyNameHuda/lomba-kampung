@@ -1,4 +1,4 @@
-import { getPendaftarByNomor, getLombaById, getKategori } from "@/lib/db";
+import { getPendaftarByNomor, getLombaById, getKategori, getSettings } from "@/lib/db";
 import Link from "next/link";
 import PrintButton from "./print-button";
 
@@ -13,32 +13,44 @@ async function SuksesContent({ searchParamsPromise }: { searchParamsPromise: Pro
   const sp = await searchParamsPromise;
   const nomor = sp.nomor || "LMB-XXXX";
 
-  const p = await getPendaftarByNomor(nomor);
+  // Parallelize: cfg + pendaftar + kats are independent
+  const [p, cfg, kats] = await Promise.all([
+    getPendaftarByNomor(nomor),
+    getSettings(),
+    getKategori(),
+  ]);
   const l = p ? await getLombaById(p.lombaId) : null;
-  const kats = await getKategori();
   const k = p ? kats.find((kk) => kk.id === p.kategoriId) : null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#FCE0E0] to-[#f5fbfc] flex flex-col text-sm">
-      <header className="bg-white/80 backdrop-blur py-4 flex items-center justify-center">
-        <div className="flex items-center gap-2 text-primary font-bold">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.webp" alt="Logo IPEKA" className="w-6 h-6 rounded-full object-cover" />
-          <span>Lomba Kampung</span>
+    <div className="mobile-page">
+      {/* Match the public header — sticky red gradient with logo + back nav. */}
+      <header className="app-header">
+        <div className="header-content header-content-wide">
+          <Link href="/" className="w-9 h-9 rounded-full bg-white/20 text-white flex items-center justify-center" aria-label="Kembali ke daftar lomba">
+            <i className="fas fa-arrow-left"></i>
+          </Link>
+          <div className="logo flex-1 text-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.webp" alt="Logo IPEKA" className="w-6 h-6 rounded-full object-cover inline-block mr-1.5 bg-white/10" />
+            <span className="text-base font-bold">{cfg?.appName || "Lomba Kampung"}</span>
+          </div>
+          <span className="w-9"></span>
         </div>
       </header>
 
-      <main className="flex-1 px-5 py-7 flex flex-col items-center max-w-md mx-auto w-full">
-        <div className="w-20 h-20 rounded-full bg-[#DCFCE7] text-[#15803D] flex items-center justify-center text-4xl my-6">
-          <i className="fas fa-check"></i>
+      <main className="app-content max-w-[600px] mx-auto w-full">
+        <div className="text-center mb-6 pt-2">
+          <div className="w-20 h-20 mx-auto rounded-full bg-[#DCFCE7] text-[#15803D] flex items-center justify-center text-4xl mb-4 success-check-icon">
+            <i className="fas fa-check"></i>
+          </div>
+          <h1 className="text-[22px] font-extrabold text-[#1F2937] mb-2">Pendaftaran Berhasil! 🎉</h1>
+          <p className="text-[#6B7280] text-sm leading-relaxed">
+            Bukti pendaftaran Anda sudah tersimpan. Tunjukkan kartu ini di lokasi lomba.
+          </p>
         </div>
 
-        <h1 className="text-xl font-extrabold text-center mb-2">Pendaftaran Berhasil! 🎉</h1>
-        <p className="text-[#6B7280] text-center text-sm mb-6 leading-relaxed">
-          Bukti pendaftaran Anda sudah tersimpan. Tunjukkan kartu ini di lokasi lomba.
-        </p>
-
-        <div className="w-full max-w-[340px] bg-white rounded-2xl shadow-lg overflow-hidden border-2 border-primary">
+        <div className="kartu-peserta w-full max-w-[420px] mx-auto bg-white rounded-2xl shadow-lg overflow-hidden border-2 border-primary">
           <div className="bg-gradient-to-br from-primary to-primary-dark text-white p-4 flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-bold">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -52,15 +64,15 @@ async function SuksesContent({ searchParamsPromise }: { searchParamsPromise: Pro
             <div className="text-[10px] text-[#6B7280] tracking-wider">NOMOR PENDAFTARAN</div>
             <div className="font-mono text-lg font-bold text-primary mb-3.5">{nomor}</div>
 
-            {p && (
+            {p ? (
               <>
-                <div className="text-base font-bold text-[#1F2937] mb-3.5 border-b-2 border-dashed border-[#E5E7EB] pb-3.5">
+                <div className="text-base font-bold text-[#1F2937] mb-3.5 border-b-2 border-dashed border-[#E5E7EB] pb-3.5 break-words">
                   {p.nama}
                 </div>
                 <div className="flex flex-col gap-2.5 text-xs leading-relaxed">
                   <div className="flex justify-between gap-2">
                     <span className="text-[#6B7280]">Lomba</span>
-                    <span className="font-semibold text-right">
+                    <span className="font-semibold text-right break-words">
                       {l?.emoji} {l?.nama}
                     </span>
                   </div>
@@ -74,6 +86,10 @@ async function SuksesContent({ searchParamsPromise }: { searchParamsPromise: Pro
                   </div>
                 </div>
               </>
+            ) : (
+              <div className="text-sm text-[#6B7280] italic text-center py-3">
+                Data pendaftar tidak ditemukan. Hubungi PJ lomba.
+              </div>
             )}
           </div>
 
@@ -82,13 +98,15 @@ async function SuksesContent({ searchParamsPromise }: { searchParamsPromise: Pro
           </div>
         </div>
 
-        <div className="flex gap-2.5 w-full max-w-[340px] my-5">
+        <div className="flex gap-2.5 w-full max-w-[420px] mx-auto my-5">
           <PrintButton />
         </div>
 
-        <Link href="/" className="btn btn-ghost">
-          <i className="fas fa-arrow-left"></i> Kembali ke daftar lomba
-        </Link>
+        <div className="text-center">
+          <Link href="/" className="btn btn-ghost inline-flex">
+            <i className="fas fa-arrow-left"></i> Kembali ke daftar lomba
+          </Link>
+        </div>
       </main>
     </div>
   );

@@ -134,138 +134,144 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
   return (
     <div className="mobile-page">
       <div className="detail-hero">
-        <Link href="/" className="absolute top-4 left-4 w-9 h-9 rounded-full bg-white/20 text-white flex items-center justify-center">
+        <Link href="/" className="absolute top-4 left-4 w-9 h-9 rounded-full bg-white/20 text-white flex items-center justify-center" aria-label="Kembali ke daftar lomba">
           <i className="fas fa-arrow-left"></i>
         </Link>
-        <span className="text-6xl block mb-3">{l.emoji}</span>
-        <h1 className="text-[22px] font-extrabold mb-1">{l.nama}</h1>
-        <div className="flex flex-col items-center gap-3 mb-2">
-          <span className="inline-block bg-white/20 px-3 py-1 rounded-full text-[11px] font-semibold">
-            {l.kategoriEligible.map((k) => katMap.get(k)?.nama).filter(Boolean).join(" · ")}
-          </span>
-          <PublicStatusBadge status={publicStatus} />
+        <div className="detail-hero-content">
+          <span className="text-6xl block mb-3">{l.emoji}</span>
+          <h1 className="text-[22px] font-extrabold mb-1">{l.nama}</h1>
+          <div className="flex flex-col items-center gap-3 mb-2">
+            <span className="inline-block bg-white/20 px-3 py-1 rounded-full text-[11px] font-semibold">
+              {l.kategoriEligible.map((k) => katMap.get(k)?.nama).filter(Boolean).join(" · ")}
+            </span>
+            <PublicStatusBadge status={publicStatus} />
+          </div>
         </div>
       </div>
 
-      <main className="app-content">
+      <main className="app-content max-w-[1100px] mx-auto w-full">
         {l.deskripsi && <p className="text-sm text-[#1F2937] mb-4 px-1 leading-relaxed">{l.deskripsi}</p>}
 
-        <div className="info-section">
-          <h3 className="text-[13px] font-bold mb-3 text-[#1F2937] flex items-center gap-2">
-            <i className="fas fa-clipboard-list text-primary"></i> Syarat & Ketentuan
-          </h3>
-          <ul className="space-y-2.5 text-[13px] text-[#6B7280] list-none p-0 leading-relaxed">
-            {(l.syarat || []).map((s, i) => (
-              <li key={i} className="pl-5 relative">
-                <span className="absolute left-0 text-[#15803D] font-bold">✓</span> {s}
-              </li>
-            ))}
-          </ul>
-        </div>
+        <div className="detail-2col grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+          <div className="space-y-3.5">
+            <div className="info-section">
+              <h3 className="text-[13px] font-bold mb-3 text-[#1F2937] flex items-center gap-2">
+                <i className="fas fa-clipboard-list text-primary"></i> Syarat & Ketentuan
+              </h3>
+              <ul className="space-y-2.5 text-[13px] text-[#6B7280] list-none p-0 leading-relaxed">
+                {(l.syarat || []).map((s, i) => (
+                  <li key={i} className="pl-5 relative">
+                    <span className="absolute left-0 text-[#15803D] font-bold">✓</span> {s}
+                  </li>
+                ))}
+              </ul>
+            </div>
 
-        <div className="info-section">
-          <h3 className="text-[13px] font-bold mb-3 text-[#1F2937] flex items-center gap-2">
-            <i className="far fa-calendar text-primary"></i> Jadwal Pelaksanaan
-          </h3>
-          {(() => {
-            const jadwals = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
-              .map((kid) => ({ kid, jadwal: l.jadwalByKategori?.[kid] }))
-              .filter((x) => x.jadwal && (x.jadwal.tanggal != null || x.jadwal.jam != null));
-            if (jadwals.length === 0) {
-              return <div className="text-center py-3 text-[#6B7280] text-sm">Belum ada jadwal yang diumumkan</div>;
-            }
-            return (
-              <div className="space-y-2.5 mt-2">
-                {jadwals.map(({ kid, jadwal }) => {
-                  const kat = katMap.get(kid);
-                  return (
-                    <div key={kid} className="flex items-center gap-3 p-3 bg-[#F9FAFB] rounded-lg">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent text-white flex items-center justify-center flex-shrink-0">
-                        <i className="far fa-calendar text-base"></i>
-                      </div>
-                      <div className="flex-1 min-w-0 flex flex-col gap-0.5 leading-snug">
-                        {kat && <div className="text-[10px] font-bold text-primary uppercase tracking-wide">{kat.nama}</div>}
-                        {jadwal!.tanggal != null && (
-                          <div className="font-semibold text-[13px]">{formatTanggalLomba(jadwal!.tanggal as number, "weekday-long")}</div>
-                        )}
-                        {jadwal!.jam && <div className="text-[11px] text-[#6B7280]">Pukul {jadwal!.jam} WIB</div>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
-        </div>
-
-        <div className="info-section">
-          <h3 className="text-[13px] font-bold mb-3 text-[#1F2937] flex items-center gap-2">
-            <i className="fas fa-user-tie text-primary"></i> Penanggung Jawab
-            {(() => {
-              const katCount = new Set(pjEntries.map((e) => e.katId)).size;
-              return katCount > 1 ? (
-                <span className="text-[10px] font-normal text-[#6B7280]">per kategori</span>
-              ) : null;
-            })()}
-          </h3>
-          <div className="space-y-3 mt-2">
-            {(() => {
-              // Group PJ entries by kategori, preserving the eligible order.
-              const groups = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
-                .map((kid) => ({
-                  kid,
-                  kat: katMap.get(kid),
-                  pjs: pjEntries.filter((e) => e.katId === kid),
-                }))
-                .filter((g) => g.pjs.length > 0);
-              if (groups.length === 0) {
+            <div className="info-section">
+              <h3 className="text-[13px] font-bold mb-3 text-[#1F2937] flex items-center gap-2">
+                <i className="far fa-calendar text-primary"></i> Jadwal Pelaksanaan
+              </h3>
+              {(() => {
+                const jadwals = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
+                  .map((kid) => ({ kid, jadwal: l.jadwalByKategori?.[kid] }))
+                  .filter((x) => x.jadwal && (x.jadwal.tanggal != null || x.jadwal.jam != null));
+                if (jadwals.length === 0) {
+                  return <div className="text-center py-3 text-[#6B7280] text-sm">Belum ada jadwal yang diumumkan</div>;
+                }
                 return (
-                  <div className="text-center py-4 text-[#6B7280] text-sm">
-                    Belum ada PJ yang ditugaskan
+                  <div className="space-y-2.5 mt-2">
+                    {jadwals.map(({ kid, jadwal }) => {
+                      const kat = katMap.get(kid);
+                      return (
+                        <div key={kid} className="flex items-center gap-3 p-3 bg-[#F9FAFB] rounded-lg">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent text-white flex items-center justify-center flex-shrink-0">
+                            <i className="far fa-calendar text-base"></i>
+                          </div>
+                          <div className="flex-1 min-w-0 flex flex-col gap-0.5 leading-snug">
+                            {kat && <div className="text-[10px] font-bold text-primary uppercase tracking-wide">{kat.nama}</div>}
+                            {jadwal!.tanggal != null && (
+                              <div className="font-semibold text-[13px]">{formatTanggalLomba(jadwal!.tanggal as number, "weekday-long")}</div>
+                            )}
+                            {jadwal!.jam && <div className="text-[11px] text-[#6B7280]">Pukul {jadwal!.jam} WIB</div>}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
-              }
-              return groups.map((g) => (
-                <div key={g.kid} className="border border-[#E5E7EB] rounded-lg overflow-hidden">
-                  <div
-                    className="px-3.5 py-2 text-[11px] font-bold text-primary uppercase tracking-wide"
-                    style={{
-                      background: g.kat?.colorBg || "#F9FAFB",
-                      color: g.kat?.colorText || "#92400E",
-                      borderBottom: `1px solid ${g.kat?.colorBorder || "#E5E7EB"}`,
-                    }}
-                  >
-                    <i className="fas fa-tag"></i> {g.kat?.nama || g.kid}
-                    <span className="ml-2 text-[10px] font-normal opacity-80 normal-case">{g.pjs.length} PJ</span>
-                  </div>
-                  <div className="divide-y divide-[#F3F4F6]">
-                    {g.pjs.map(({ pj }, pjIdx) => (
-                      <div key={pjIdx} className="flex items-center gap-3 p-3 bg-white">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
-                          {getInitials(pj.nama)}
+              })()}
+            </div>
+          </div>
+
+          <div className="info-section">
+            <h3 className="text-[13px] font-bold mb-3 text-[#1F2937] flex items-center gap-2">
+              <i className="fas fa-user-tie text-primary"></i> Penanggung Jawab
+              {(() => {
+                const katCount = new Set(pjEntries.map((e) => e.katId)).size;
+                return katCount > 1 ? (
+                  <span className="text-[10px] font-normal text-[#6B7280]">per kategori</span>
+                ) : null;
+              })()}
+            </h3>
+            <div className="space-y-3 mt-2">
+              {(() => {
+                // Group PJ entries by kategori, preserving the eligible order.
+                const groups = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
+                  .map((kid) => ({
+                    kid,
+                    kat: katMap.get(kid),
+                    pjs: pjEntries.filter((e) => e.katId === kid),
+                  }))
+                  .filter((g) => g.pjs.length > 0);
+                if (groups.length === 0) {
+                  return (
+                    <div className="text-center py-4 text-[#6B7280] text-sm">
+                      Belum ada PJ yang ditugaskan
+                    </div>
+                  );
+                }
+                return groups.map((g) => (
+                  <div key={g.kid} className="border border-[#E5E7EB] rounded-lg overflow-hidden">
+                    <div
+                      className="px-3.5 py-2 text-[11px] font-bold text-primary uppercase tracking-wide"
+                      style={{
+                        background: g.kat?.colorBg || "#F9FAFB",
+                        color: g.kat?.colorText || "#92400E",
+                        borderBottom: `1px solid ${g.kat?.colorBorder || "#E5E7EB"}`,
+                      }}
+                    >
+                      <i className="fas fa-tag"></i> {g.kat?.nama || g.kid}
+                      <span className="ml-2 text-[10px] font-normal opacity-80 normal-case">{g.pjs.length} PJ</span>
+                    </div>
+                    <div className="divide-y divide-[#F3F4F6]">
+                      {g.pjs.map(({ pj }, pjIdx) => (
+                        <div key={pjIdx} className="flex items-center gap-3 p-3 bg-white">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
+                            {getInitials(pj.nama)}
+                          </div>
+                          <div className="flex-1 min-w-0 flex flex-col gap-0.5 leading-snug">
+                            <div className="font-semibold text-[13px] truncate">{pj.nama}</div>
+                            {pj.kontak && <div className="text-[11px] text-[#6B7280]">{pj.kontak}</div>}
+                          </div>
+                          {pj.kontak && (
+                            <a
+                              href={`https://wa.me/${pj.kontak.replace(/\D/g, "")}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-[#25D366] text-white rounded-lg text-[12px] font-bold hover:bg-[#1ebe57] transition-all no-underline"
+                              title={`Chat WhatsApp ${pj.nama}`}
+                            >
+                              <i className="fab fa-whatsapp text-base"></i>
+                              <span>Chat</span>
+                            </a>
+                          )}
                         </div>
-                        <div className="flex-1 min-w-0 flex flex-col gap-0.5 leading-snug">
-                          <div className="font-semibold text-[13px] truncate">{pj.nama}</div>
-                          {pj.kontak && <div className="text-[11px] text-[#6B7280]">{pj.kontak}</div>}
-                        </div>
-                        {pj.kontak && (
-                          <a
-                            href={`https://wa.me/${pj.kontak.replace(/\D/g, "")}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-[#25D366] text-white rounded-lg text-[12px] font-bold hover:bg-[#1ebe57] transition-all no-underline"
-                            title={`Chat WhatsApp ${pj.nama}`}
-                          >
-                            <i className="fab fa-whatsapp text-base"></i>
-                            <span>Chat</span>
-                          </a>
-                        )}
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ));
-            })()}
+                ));
+              })()}
+            </div>
           </div>
         </div>
 
@@ -273,7 +279,7 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
             and after selesai. Juara 1/2/3 get gold/silver/bronze + "Juara N" label,
             other finalists get plain "Finalis" label. Per-kategori blocks. */}
         {showFinalis && (
-          <div className="info-section">
+          <div className="info-section mt-3.5">
             <h3 className="text-[13px] font-bold mb-3 text-[#1F2937] flex items-center gap-2">
               <i className="fas fa-trophy text-[#FFD700]"></i> Finalis
               <span className="ml-auto text-[11px] font-normal text-[#6B7280]">
@@ -329,7 +335,7 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
         )}
 
         {/* Peserta Terdaftar */}
-        <div className="info-section">
+        <div className="info-section mt-3.5">
           <h3 className="text-[13px] font-bold mb-3 text-[#1F2937] flex items-center gap-2">
             <i className="fas fa-users text-primary"></i> Peserta Terdaftar
             <span className="ml-auto text-[11px] font-normal text-[#6B7280]">{totalPeserta} orang</span>
@@ -359,17 +365,21 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
 
       {/* CTA — only for aktif lomba, and only when admin hasn't closed registration */}
       {l.status === "aktif" && l.pendaftaranDibuka && (
-        <div className="sticky-cta">
-          <Link href={`/lomba/${l.id}/daftar`} className="btn btn-primary btn-block">
-            <i className="fas fa-pen-to-square"></i> Daftar Sekarang
-          </Link>
+        <div className="sticky-cta-wrap">
+          <div className="sticky-cta-inner max-w-[1100px] mx-auto">
+            <Link href={`/lomba/${l.id}/daftar`} className="btn btn-primary btn-block">
+              <i className="fas fa-pen-to-square"></i> Daftar Sekarang
+            </Link>
+          </div>
         </div>
       )}
       {/* Show "Pendaftaran Ditutup" notice instead of CTA when admin closed it */}
       {l.status === "aktif" && !l.pendaftaranDibuka && (
-        <div className="sticky-cta">
-          <div className="bg-[#FEE2E2] text-[#991B1B] rounded-xl p-3 text-center text-[13px] font-semibold flex items-center justify-center gap-2">
-            <i className="fas fa-lock"></i> Pendaftaran Ditutup oleh Panitia
+        <div className="sticky-cta-wrap">
+          <div className="sticky-cta-inner max-w-[1100px] mx-auto">
+            <div className="bg-[#FEE2E2] text-[#991B1B] rounded-xl p-3 text-center text-[13px] font-semibold flex items-center justify-center gap-2">
+              <i className="fas fa-lock"></i> Pendaftaran Ditutup oleh Panitia
+            </div>
           </div>
         </div>
       )}

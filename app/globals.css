@@ -640,8 +640,15 @@
   background: linear-gradient(135deg, #E11D1D 0%, #9D1010 100%); color: white;
   padding: 18px 20px; display: flex; align-items: center; gap: 14px;
 }
-.form-body { flex: 1; padding: 24px 20px 120px; line-height: 1.5; }
+/* Form body centered on desktop with a comfortable reading width.
+   On mobile, fills the viewport as before. */
+.form-body { flex: 1; padding: 24px 20px 120px; line-height: 1.5; max-width: 600px; width: 100%; margin: 0 auto; }
 .form-footer { position: sticky; bottom: 0; background: white; padding: 14px 20px; border-top: 1px solid #E5E7EB; z-index: 10; }
+/* On desktop, cap the form footer too so the "Kirim Pendaftaran" button
+   stays aligned with the form content above. */
+@media (min-width: 640px) {
+  .form-footer { max-width: 600px; margin: 0 auto; left: 0; right: 0; }
+}
 .form-intro {
   background: #FCE0E0; border-left: 4px solid #E11D1D; padding: 14px 16px; border-radius: 8px;
   margin-bottom: 20px; font-size: 12px; color: #9D1010; line-height: 1.5;
@@ -693,7 +700,129 @@
 .tag-dewasa { background: #FFFFFF; color: #9D1010; border-color: #E11D1D; }
 .info-section { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 18px; margin-bottom: 14px; line-height: 1.5; }
 .info-section h3 { line-height: 1.4; }
+/* Sticky CTA — legacy single-class version (used by some pages).
+   Kept for backward compat. New pages should use sticky-cta-wrap +
+   sticky-cta-inner for the constrained desktop layout. */
 .sticky-cta { position: sticky; bottom: 0; background: white; padding: 14px 20px; border-top: 1px solid #E5E7EB; z-index: 10; }
+/* Sticky CTA wrapper — outer is full-width sticky bar, inner is constrained
+   to the same max-width as the main content above. The outer provides the
+   full-bleed background + border-top, the inner centers the button. */
+.sticky-cta-wrap { position: sticky; bottom: 0; background: white; padding: 14px 20px; border-top: 1px solid #E5E7EB; z-index: 10; }
+/* On mobile the inner is full-width inside the bar. The bar's padding
+   already gives some breathing room. */
+.sticky-cta-inner { width: 100%; }
+@media (min-width: 1100px) {
+  /* On wider viewports, constrain the inner too so the button stays
+     aligned with the centered main content (max-w-[1100px]). */
+  .sticky-cta-wrap { padding-left: 0; padding-right: 0; }
+  .sticky-cta-inner { max-width: 1060px; margin: 0 auto; }
+}
+
+/* =================== Header content — center the inner on desktop =================== */
+/* Used by form-header, app-header (when wrapped in .header-content). The
+   outer keeps the full-bleed red gradient; the inner constrains the content
+   to a comfortable reading width on desktop (max-w-[600px] for forms,
+   max-w-[1100px] for the public home/detail). The form-header specifically
+   uses 600px to match the form-body / form-footer. */
+.header-content {
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+/* For public app-header (home, detail) — allow wider inner so the desktop
+   layout breathes. Override the 600px with 1100px on those pages by adding
+   `.header-content-wide` class. */
+.header-content-wide { max-width: 1100px; }
+
+/* Reduced motion: respect user setting */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Global focus-visible — keyboard nav only. Use a brand-tinted ring. */
+:focus-visible {
+  outline: 3px solid #E11D1D;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+/* Buttons / links: slightly different treatment so the ring doesn't clip */
+button:focus-visible, a:focus-visible {
+  outline-offset: 3px;
+}
+
+/* Mobile hero — tighter padding on mobile, more dramatic on desktop */
+.mobile-hero { padding: 28px 20px 32px; }
+@media (min-width: 768px) {
+  .mobile-hero { padding: 56px 24px 60px; }
+}
+@media (min-width: 1100px) {
+  /* On wider viewports, cap the hero text width so the title doesn't
+     stretch awkwardly across a huge band. */
+  .mobile-hero .hero-content { max-width: 720px; margin: 0 auto; }
+  .mobile-hero h1 { font-size: 32px; }
+}
+
+/* Detail hero — same idea: cap content on very wide screens so it doesn't
+   feel sparse. The hero itself stays full-width for visual punch. */
+.detail-hero-content { width: 100%; }
+@media (min-width: 1100px) {
+  .detail-hero-content { max-width: 720px; margin: 0 auto; }
+  .detail-hero { padding: 56px 24px 52px; }
+  .detail-hero h1 { font-size: 28px; }
+}
+
+/* Detail page 2-col: prevent columns from stretching to match each other
+   (PJ section is often taller than Syarat + Jadwal). items-start + auto
+   row alignment keeps each column its natural height. */
+.detail-2col { align-items: start; }
+
+/* Form: keep header content from clipping on tiny phones (<360px) */
+@media (max-width: 360px) {
+  .form-header { padding: 14px 14px; }
+  .form-header h2 { font-size: 14px; }
+}
+
+/* =================== Success page =================== */
+/* Subtle bounce-in for the check icon when arriving at /sukses. Mobile +
+   desktop. Respects prefers-reduced-motion via the global rule above. */
+@keyframes successPop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.success-check-icon {
+  animation: successPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  box-shadow: 0 8px 20px rgba(21, 128, 61, 0.18);
+}
+
+/* =================== Print styles (for Sukses kartu peserta) =================== */
+/* When user clicks "Simpan Kartu", print only the kartu-peserta card.
+   Hide header, nav, and all decorations. */
+@media print {
+  body { background: white !important; }
+  .app-header,
+  .kartu-peserta + .flex,
+  main > .text-center:last-child,
+  .success-check-icon { display: none !important; }
+  .mobile-page { min-height: auto !important; }
+  main.app-content { padding: 0 !important; }
+  .kartu-peserta {
+    border: 2px solid #E11D1D !important;
+    box-shadow: none !important;
+    max-width: 100% !important;
+    margin: 12mm auto !important;
+    page-break-inside: avoid;
+  }
+  @page { margin: 12mm; }
+}
 
 /* =================== Stage system v4 — Kualifikasi tabs =================== */
 .kual-tabs {

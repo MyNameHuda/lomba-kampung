@@ -1,5 +1,6 @@
 import { getLombaById, getKategori } from "@/lib/db";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import DaftarForm from "./daftar-form";
 
 export const dynamic = "force-dynamic";
@@ -26,14 +27,16 @@ export default async function DaftarPage({ params }: { params: Promise<{ id: str
     return (
       <div className="mobile-page">
         <header className="app-header">
-          <a href={`/lomba/${l.id}`} className="w-9 h-9 rounded-full bg-white/20 text-white flex items-center justify-center">
-            <i className="fas fa-arrow-left"></i>
-          </a>
-          <h1 className="flex-1 text-center text-base font-bold">Pendaftaran Ditutup</h1>
-          <span className="w-9"></span>
+          <div className="header-content">
+            <Link href={`/lomba/${l.id}`} className="w-9 h-9 rounded-full bg-white/20 text-white flex items-center justify-center" aria-label="Kembali">
+              <i className="fas fa-arrow-left"></i>
+            </Link>
+            <h1 className="flex-1 text-center text-base font-bold">Pendaftaran Ditutup</h1>
+            <span className="w-9"></span>
+          </div>
         </header>
-        <main className="app-content">
-          <div className="bg-white border border-[#E5E7EB] rounded-2xl p-8 text-center shadow-sm">
+        <main className="app-content max-w-[600px] mx-auto">
+          <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 sm:p-8 text-center shadow-sm">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#FEE2E2] text-[#E11D1D] flex items-center justify-center text-3xl">
               <i className="fas fa-lock"></i>
             </div>
@@ -41,9 +44,9 @@ export default async function DaftarPage({ params }: { params: Promise<{ id: str
             <p className="text-sm text-[#6B7280] leading-relaxed mb-6">
               Pendaftaran publik untuk lomba ini sudah ditutup oleh panitia. Hubungi PJ lomba untuk info lebih lanjut, atau kembali ke halaman lomba.
             </p>
-            <a href={`/lomba/${l.id}`} className="btn btn-primary inline-flex">
+            <Link href={`/lomba/${l.id}`} className="btn btn-primary inline-flex">
               <i className="fas fa-arrow-left"></i> Kembali ke Detail Lomba
-            </a>
+            </Link>
           </div>
         </main>
       </div>

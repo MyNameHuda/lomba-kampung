@@ -42,29 +42,33 @@ export default async function PublicHome() {
   return (
     <div className="mobile-page">
       <header className="app-header">
-        <div className="logo">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.webp" alt="Logo IPEKA" className="w-7 h-7 rounded-full object-cover bg-white/10" />
-          <span>{cfg?.appName || "Lomba Kampung"}</span>
+        <div className="header-content header-content-wide">
+          <div className="logo">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.webp" alt="Logo IPEKA" className="w-7 h-7 rounded-full object-cover bg-white/10" />
+            <span>{cfg?.appName || "Lomba Kampung"}</span>
+          </div>
+          {isAdmin ? (
+            <Link href="/admin" className="text-sm font-semibold bg-white/20 px-3 py-1.5 rounded-full flex items-center gap-1.5 no-underline text-white">
+              <i className="fas fa-gauge-high"></i>
+              <span className="hidden sm:inline">Admin</span>
+            </Link>
+          ) : (
+            <Link href="/admin/login" className="text-sm opacity-80 text-white" title="Login Admin" aria-label="Login Admin">
+              <i className="fas fa-user-shield"></i>
+            </Link>
+          )}
         </div>
-        {isAdmin ? (
-          <Link href="/admin" className="text-sm font-semibold bg-white/20 px-3 py-1.5 rounded-full flex items-center gap-1.5 no-underline text-white">
-            <i className="fas fa-gauge-high"></i>
-            <span className="hidden sm:inline">Admin</span>
-          </Link>
-        ) : (
-          <Link href="/admin/login" className="text-sm opacity-80" title="Login Admin">
-            <i className="fas fa-user-shield"></i>
-          </Link>
-        )}
       </header>
 
       <div className="mobile-hero">
-        <div className="inline-block bg-white/20 px-3 py-1 rounded-full text-[11px] font-semibold mb-2">
-          🇮🇩 {cfg?.tahunAktif || "HUT RI ke-81 (2026)"}
+        <div className="hero-content">
+          <div className="inline-block bg-white/20 px-3 py-1 rounded-full text-[11px] font-semibold mb-2">
+            🇮🇩 {cfg?.tahunAktif || "HUT RI ke-81 (2026)"}
+          </div>
+          <h1>Perlombaan 17 Agustus</h1>
+          <p>{cfg?.kampungName || "Kampung Merdeka"}</p>
         </div>
-        <h1>Perlombaan 17 Agustus</h1>
-        <p>{cfg?.kampungName || "Kampung Merdeka"}</p>
       </div>
 
       <HomeClient lomba={lomba} kategori={kats} />
