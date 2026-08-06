@@ -1,4 +1,4 @@
-﻿// E2E test for stage system v4 â€” finalist (is_finalist) + Gugur + per-kategori Tutup + Juara.
+﻿// E2E test for stage system v4 "” finalist (is_finalist) + Gugur + per-kategori Tutup + Juara.
 // API-focused (no puppeteer). Verifies:
 //   1. Schema: is_finalist tri-state + lomba_kategori.kualifikasi_tutup_at
 //   2. POST /finalist sets is_finalist (1=lolos, 0=gugur, null=pending)
@@ -40,7 +40,7 @@ async function api(method, path, body, session) {
   return { status: res.status, body: json };
 }
 
-// Retry helper â€” prod pendaftar creation is occasionally flaky (500 error
+// Retry helper "” prod pendaftar creation is occasionally flaky (500 error
 // on certain umur values, possibly Turso rate limit or numbering race).
 // Retry up to 3 times with small backoff.
 async function apiWithRetry(method, path, body, session, attempts = 3) {
@@ -104,8 +104,21 @@ async function login() {
     if (!migrateOk) {
       console.log('[migrate] WARNING: migration not fully verified, test may be flaky');
     } else {
-      // Brief pause to let the schema propagate to subsequent Lambdas
-      await new Promise((r) => setTimeout(r, 500));
+      // Wait for schema to propagate. libSQL HTTP has a known race where
+      // the migration commits on one connection but subsequent requests
+      // on a different Lambda don't see it. We poll GET /api/admin/lomba
+      // (which calls loadKategoriTutupBulk) until it returns 200 with
+      // valid kategoriTutupAt data.
+      console.log('[migrate] waiting for schema to propagate to fresh Lambdas...');
+      for (let i = 0; i < 6; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const g = await api('GET', '/api/admin/lomba', null, session);
+        if (g.status === 200) {
+          console.log(`[migrate] ✓ GET /api/admin/lomba works (attempt ${i + 1})`);
+          break;
+        }
+        console.log(`[migrate] GET status=${g.status}, retry ${i + 1}/6`);
+      }
     }
 
     // 1. Create test lomba (k_anak only)
@@ -144,7 +157,7 @@ async function login() {
     assert(pendaftarIds.length === 4, '4 pendaftar created');
 
     // ============================================================
-    // TEST 1: /finalist endpoint â€” Loloskan/Gugur/Clear
+    // TEST 1: /finalist endpoint "” Loloskan/Gugur/Clear
     // ============================================================
     console.log('\n========== TEST 1: /finalist endpoint (Loloskan/Gugur/Clear) ==========');
     // 1.1 Loloskan 2 pendaftar
@@ -169,7 +182,7 @@ async function login() {
     assert(clear1.status === 200, 'POST finalist status=null (Clear / back to pending)');
 
     // ============================================================
-    // TEST 2: Tutup Kualifikasi (per-kategori) â€” should fail while pending
+    // TEST 2: Tutup Kualifikasi (per-kategori) "” should fail while pending
     // ============================================================
     console.log('\n========== TEST 2: Tutup Kualifikasi per-kategori ==========');
     // 2.1 First, set all pendaftar to Loloskan (so Tutup can succeed)
@@ -207,7 +220,7 @@ async function login() {
     assert(j2.status === 200, `set Juara 2 for ${pendaftarIds[1].nama}`);
 
     // 3.3 Verify Selesaikan Lomba is now ready (Juara 1+2 picked)
-    // First check readiness via juara state â€” but the API only exposes via Selesai
+    // First check readiness via juara state "” but the API only exposes via Selesai
     // Let's try Selesai
     const selesaiRes = await apiWithRetry('POST', `/api/admin/lomba/${lombaId}/selesai`, null, session);
     assert(selesaiRes.status === 200, 'POST /selesai succeeds (Juara 1+2 picked)');
@@ -250,7 +263,7 @@ async function login() {
     assert(publicState.finalisLabels[0] === 'Juara 1' && publicState.finalisLabels[1] === 'Juara 2', 'Juara 1+2 labels correct');
 
     // ============================================================
-    // TEST 5: Buka Kualifikasi (after Selesai) â€” should fail
+    // TEST 5: Buka Kualifikasi (after Selesai) "” should fail
     // ============================================================
     console.log('\n========== TEST 5: Buka Kualifikasi after Selesai (should fail) ==========');
     // status=selesai â†’ API guard returns 400
@@ -282,5 +295,4 @@ async function login() {
     if (browser) await browser.close();
   }
 })();
- 
- 
+
