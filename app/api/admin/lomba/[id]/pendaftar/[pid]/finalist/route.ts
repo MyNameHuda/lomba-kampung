@@ -85,7 +85,24 @@ export async function POST(
       await clearJuaraRank(pendaftarId);
     }
 
-    await setFinalist(pendaftarId, data.status);
+    // Retry on libSQL HTTP schema race (column not visible after ALTER)
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await setFinalist(pendaftarId, data.status);
+        lastError = null;
+        break;
+      } catch (e) {
+        lastError = e;
+        const msg = String(e);
+        if (msg.includes("no such column") && attempt < 2) {
+          await new Promise((r) => setTimeout(r, 100 * (attempt + 1)));
+          continue;
+        }
+        throw e;
+      }
+    }
+    if (lastError) throw lastError;
 
     revalidatePath("/admin/lomba");
     revalidatePath(`/admin/lomba/${lombaId}`);

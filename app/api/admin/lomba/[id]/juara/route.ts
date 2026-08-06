@@ -85,7 +85,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     // Set Juara (atomically un-picks existing Juara with same rank in same (lomba, kategori))
-    const result = await setJuaraRank(data.pendaftarId, data.rank);
+    // Retry on libSQL HTTP schema race (this UPDATE only touches juara_rank which
+    // has been around since v2, so unlikely — but defensive)
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await setJuaraRank(data.pendaftarId, data.rank);
+        lastError = null;
+        break;
+      } catch (e) {
+        lastError = e;
+        const msg = String(e);
+        if (msg.includes("no such column") && attempt < 2) {
+          await new Promise((r) => setTimeout(r, 100 * (attempt + 1)));
+          continue;
+        }
+        throw e;
+      }
+    }
+    if (lastError) throw lastError;
 
     // Invalidate all relevant pages
     revalidatePath("/admin/lomba");

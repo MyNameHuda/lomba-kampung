@@ -293,7 +293,6 @@ export async function getKualifikasiReadiness(lombaId: number): Promise<{
  * (is_finalist IS NOT NULL) before this succeeds.
  *
  * Returns true on success, false if any pendaftar is still pending.
- * Uses a fresh client per call to avoid libSQL HTTP schema cache issues.
  */
 export async function tutupKualifikasiKategori(
   lombaId: number,
@@ -309,30 +308,14 @@ export async function tutupKualifikasiKategori(
     kategoriId
   );
   if ((pendingRow?.c ?? 0) > 0) return false;
-  // Create a fresh client (bypass any cached schema) and run the UPDATE
-  // in a batch with the migration ALTERs. This ensures the same connection
-  // is used for migration + UPDATE, avoiding libSQL HTTP schema cache race.
-  const { createClient } = await import("@libsql/client");
-  const client = createClient({
-    url: process.env.DATABASE_URL!,
-    authToken: process.env.DATABASE_AUTH_TOKEN,
-  });
-  try {
-    await client.batch(
-      [
-        { sql: "ALTER TABLE pendaftar ADD COLUMN is_finalist INTEGER" },
-        { sql: "ALTER TABLE lomba_kategori ADD COLUMN kualifikasi_tutup_at INTEGER" },
-        {
-          sql: "UPDATE lomba_kategori SET kualifikasi_tutup_at = ? WHERE lomba_id = ? AND kategori_id = ?",
-          args: [Date.now(), lombaId, kategoriId],
-        },
-      ],
-      "write"
-    );
-    return true;
-  } finally {
-    client.close();
-  }
+  await run(
+    `UPDATE lomba_kategori SET kualifikasi_tutup_at = ?
+     WHERE lomba_id = ? AND kategori_id = ?`,
+    Date.now(),
+    lombaId,
+    kategoriId
+  );
+  return true;
 }
 
 /**
