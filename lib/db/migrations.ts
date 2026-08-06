@@ -1,6 +1,6 @@
 // Self-healing migrations — safe to call on every DB access.
 // Each migration is idempotent: no-op once the schema is in target state.
-import { all, getClient } from "./client";
+import { all, get, getClient, run } from "./client";
 import { ensureColumn } from "./internal";
 
 // Self-healing: ensure the kategori table has the color columns.
@@ -147,4 +147,167 @@ export async function ensurePendaftaranDibukaColumn(): Promise<void> {
     sql: "ALTER TABLE lomba ADD COLUMN pendaftaran_dibuka INTEGER NOT NULL DEFAULT 1",
     args: [],
   });
+}
+
+// Self-healing: ensure gender-split kategori exist (Balita, Anak L/P, Ibu-Ibu).
+// Migration from the v1 single-gender schema:
+//
+//   v1                              v2 (this migration)
+//   ─────────────────────────       ──────────────────────────────
+//   k_anak     (5–11, mixed L/P)    k_anak_l  (5–11, Laki-laki)
+//                                  k_anak_p  (5–11, Perempuan)
+//   k_remaja   (12–17, mixed)       k_remaja  (12–17, mixed, unchanged)
+//   k_dewasa   (18+, mixed)         k_dewasa_p (18+, "Ibu-Ibu", only female)
+//                                  k_balita  (0–4, single, NEW)
+//
+// Why split k_anak? Stage system v4 picks Juara 1/2/3 per (lomba, kategori).
+// With L/P mixed, the same rank lives in the same section — but warga can't
+// tell which is which without a gender suffix. Splitting gives a clean Juara
+// 1 (L) + Juara 1 (P) display.
+//
+// Why rename k_dewasa → k_dewasa_p? The kampung lomba has a single-female
+// "Ibu-Ibu" Dewasa category. Keeping the DB id (`k_dewasa_p`) preserves FK
+// consistency in lomba_kategori / pendaftar / lomba_jadwal after migration.
+//
+// Why add k_balita? Was implicitly a "k_anak" subgroup in v1, but separating
+// 0–4 into its own row gives a clearer section header on the public page
+// and on the form picker.
+//
+// Idempotent: no-op once new kats exist and old refs are migrated. Steps
+// are order-sensitive — k_dewasa DELETE is last (after all FK refs moved).
+export async function ensureGenderSplitKategori(): Promise<void> {
+  // ===== Step 1: ensure new k_balita / k_anak_l / k_anak_p exist =====
+  // Cheap PK-lookup → no-op if already present.
+  const kBalita = await get<{ id: string }>("SELECT id FROM kategori WHERE id = 'k_balita'");
+  if (!kBalita) {
+    await getClient().execute({
+      sql: `INSERT INTO kategori (id, nama, icon, min, max, urutan, auto_age, color_bg, color_text, color_border)
+            VALUES ('k_balita', 'Balita', 'fa-baby', 0, 4, 0, 1, ?, ?, ?)`,
+      args: ["#FCE7F3", "#9D174D", "#FBCFE8"],
+    });
+  }
+  const kAnakL = await get<{ id: string }>("SELECT id FROM kategori WHERE id = 'k_anak_l'");
+  if (!kAnakL) {
+    await getClient().execute({
+      sql: `INSERT INTO kategori (id, nama, icon, min, max, urutan, auto_age, color_bg, color_text, color_border)
+            VALUES ('k_anak_l', 'Anak (Laki-laki)', 'fa-child', 5, 11, 1, 1, ?, ?, ?)`,
+      args: ["#DBEAFE", "#1E40AF", "#BFDBFE"],
+    });
+  }
+  const kAnakP = await get<{ id: string }>("SELECT id FROM kategori WHERE id = 'k_anak_p'");
+  if (!kAnakP) {
+    await getClient().execute({
+      sql: `INSERT INTO kategori (id, nama, icon, min, max, urutan, auto_age, color_bg, color_text, color_border)
+            VALUES ('k_anak_p', 'Anak (Perempuan)', 'fa-child-dress', 5, 11, 2, 1, ?, ?, ?)`,
+      args: ["#FCE7F3", "#9D174D", "#FBCFE8"],
+    });
+  }
+
+  // ===== Step 2: create k_dewasa_p from k_dewasa (only if v1 row exists) =====
+  // We can't just UPDATE the id (PRIMARY KEY), so we INSERT a new row from
+  // the old one with overridden nama + id, then DELETE the old at the end.
+  const kDewasa = await get<{ id: string }>("SELECT id FROM kategori WHERE id = 'k_dewasa'");
+  const kDewasaP = await get<{ id: string }>("SELECT id FROM kategori WHERE id = 'k_dewasa_p'");
+  if (kDewasa && !kDewasaP) {
+    await getClient().execute({
+      sql: `INSERT INTO kategori (id, nama, icon, min, max, urutan, auto_age, color_bg, color_text, color_border)
+            SELECT 'k_dewasa_p', 'Ibu-Ibu', icon, min, max, urutan, auto_age, color_bg, color_text, color_border
+            FROM kategori WHERE id = 'k_dewasa'`,
+      args: [],
+    });
+  }
+
+  // ===== Step 3: migrate lomba_kategori rows =====
+  // k_anak → k_anak_l (NEW row, copy of all PJ fields) + UPDATE original → k_anak_p
+  // The PJ typically oversees the whole "Anak" age group, so we duplicate
+  // the row for both genders (same PJ info, same urutan).
+  // INSERT OR IGNORE so re-runs are safe (no-op if k_anak_l row already exists).
+  await getClient().execute({
+    sql: `INSERT OR IGNORE INTO lomba_kategori (lomba_id, kategori_id, pj_nama, pj_kontak, urutan)
+          SELECT lomba_id, 'k_anak_l', pj_nama, pj_kontak, urutan
+          FROM lomba_kategori
+          WHERE kategori_id = 'k_anak'`,
+    args: [],
+  });
+  await getClient().execute({
+    sql: "UPDATE lomba_kategori SET kategori_id = 'k_anak_p' WHERE kategori_id = 'k_anak'",
+    args: [],
+  });
+  await getClient().execute({
+    sql: "UPDATE lomba_kategori SET kategori_id = 'k_dewasa_p' WHERE kategori_id = 'k_dewasa'",
+    args: [],
+  });
+
+  // ===== Step 4: migrate pendaftar rows =====
+  // k_anak → k_anak_l / k_anak_p based on jenis_kelamin (one pendaftar is one person)
+  await getClient().execute({
+    sql: "UPDATE pendaftar SET kategori_id = 'k_anak_l' WHERE kategori_id = 'k_anak' AND jenis_kelamin = 'L'",
+    args: [],
+  });
+  await getClient().execute({
+    sql: "UPDATE pendaftar SET kategori_id = 'k_anak_p' WHERE kategori_id = 'k_anak' AND jenis_kelamin = 'P'",
+    args: [],
+  });
+  // Edge case: pendaftar without jenis_kelamin set (shouldn't happen — schema
+  // requires NOT NULL — but be defensive so we don't leave orphans).
+  await getClient().execute({
+    sql: "UPDATE pendaftar SET kategori_id = 'k_anak_l' WHERE kategori_id = 'k_anak' AND jenis_kelamin NOT IN ('L', 'P')",
+    args: [],
+  });
+  await getClient().execute({
+    sql: "UPDATE pendaftar SET kategori_id = 'k_dewasa_p' WHERE kategori_id = 'k_dewasa'",
+    args: [],
+  });
+
+  // ===== Step 5: migrate lomba_jadwal rows =====
+  // Same pattern as lomba_kategori — duplicate k_anak row to k_anak_l.
+  await getClient().execute({
+    sql: `INSERT OR IGNORE INTO lomba_jadwal (lomba_id, kategori_id, tanggal, jam)
+          SELECT lomba_id, 'k_anak_l', tanggal, jam
+          FROM lomba_jadwal
+          WHERE kategori_id = 'k_anak'`,
+    args: [],
+  });
+  await getClient().execute({
+    sql: "UPDATE lomba_jadwal SET kategori_id = 'k_anak_p' WHERE kategori_id = 'k_anak'",
+    args: [],
+  });
+  await getClient().execute({
+    sql: "UPDATE lomba_jadwal SET kategori_id = 'k_dewasa_p' WHERE kategori_id = 'k_dewasa'",
+    args: [],
+  });
+
+  // ===== Step 6: migrate lomba.kategori_eligible JSON =====
+  // Replace k_anak with [k_anak_l, k_anak_p], k_dewasa with k_dewasa_p.
+  // Dedupe (in case a lomba already had k_anak_l from a partial migration).
+  const allLomba = await all<{ id: number; kategori_eligible: string }>(
+    "SELECT id, kategori_eligible FROM lomba"
+  );
+  for (const l of allLomba) {
+    let arr: string[];
+    try { arr = JSON.parse(l.kategori_eligible); } catch { arr = []; }
+    if (!Array.isArray(arr)) continue;
+    const newArr: string[] = [];
+    for (const kid of arr) {
+      if (kid === "k_anak") {
+        if (!newArr.includes("k_anak_l")) newArr.push("k_anak_l");
+        if (!newArr.includes("k_anak_p")) newArr.push("k_anak_p");
+      } else if (kid === "k_dewasa") {
+        if (!newArr.includes("k_dewasa_p")) newArr.push("k_dewasa_p");
+      } else {
+        if (!newArr.includes(kid)) newArr.push(kid);
+      }
+    }
+    if (JSON.stringify(newArr) !== l.kategori_eligible) {
+      await run("UPDATE lomba SET kategori_eligible = ? WHERE id = ?", JSON.stringify(newArr), l.id);
+    }
+  }
+
+  // ===== Step 7: delete old k_dewasa row (last, after all FK refs moved) =====
+  // Safe now because lomba_kategori / pendaftar / lomba_jadwal all point
+  // to k_dewasa_p. The FK ON DELETE CASCADE on lomba_kategori /
+  // lomba_jadwal will not fire (no rows reference k_dewasa anymore).
+  if (kDewasa && kDewasaP) {
+    await run("DELETE FROM kategori WHERE id = 'k_dewasa'");
+  }
 }

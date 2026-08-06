@@ -63,6 +63,27 @@ export function tsToUtcDateStr(ts: number): string {
   return new Date(ts * 1000).toISOString().slice(0, 10);
 }
 
+// =================== Juara label helper ===================
+// Public Juara 1/2/3 are split per-(lomba, kategori). When a lomba has both
+// `k_anak_l` and `k_anak_p` eligible, the same rank lives in two different
+// sections — warga needs to know which is which without reading the section
+// header. So we append "(Laki-laki)" / "(Perempuan)" for the L/P split.
+//
+// For other kategori (Balita single, Remaja mixed, Ibu-Ibu only female), the
+// section header already conveys the gender context — no suffix needed.
+//
+// Used in: public detail page, admin Juara picker, XLSX Juara sheet.
+//
+// @param kategoriId  the section's kategori id
+// @param rank        1, 2, or 3
+// @returns "Juara 1 (Laki-laki)" for k_anak_l, "Juara 1 (Perempuan)" for
+//          k_anak_p, "Juara 1" otherwise.
+export function juaraLabel(kategoriId: string, rank: 1 | 2 | 3): string {
+  if (kategoriId === "k_anak_l") return `Juara ${rank} (Laki-laki)`;
+  if (kategoriId === "k_anak_p") return `Juara ${rank} (Perempuan)`;
+  return `Juara ${rank}`;
+}
+
 /**
  * Format a unix-seconds timestamp as a human-readable Indonesian date in
  * Asia/Jakarta timezone. Used for public display + XLSX export — these all

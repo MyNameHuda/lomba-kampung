@@ -237,18 +237,32 @@ export async function groupPendaftarForLomba(lombaId: number): Promise<{
   const buildPeserta = (arr: typeof rows) => arr.map((r) => ({ nama: r.nama, umur: r.umur, jenisKelamin: r.jenis_kelamin }));
 
   // Build rich sections array (for unified display across public + admin)
+  // Section titles use the master `kategori.nama` for k_balita / k_anak_l /
+  // k_anak_p (so they pick up the canonical display). Dewasa pulls from the
+  // single dewasa kategori (renamed to k_dewasa_p / "Ibu-Ibu" in the gender
+  // split migration).
+  const findNamaByMin = (max: number) => kats.find((k) => k.min === 0 && k.max === 4)?.nama || "Balita";
+  const findAnakL = () => kats.find((k) => k.id === "k_anak_l")?.nama || "Anak (Laki-laki)";
+  const findAnakP = () => kats.find((k) => k.id === "k_anak_p")?.nama || "Anak (Perempuan)";
+  const findDewasaNama = () => {
+    // Use the actual kategori name (e.g. "Ibu-Ibu" after the gender-split
+    // migration). Fall back to "Dewasa" if no dewasa kategori is found.
+    const dewasaKat = kats.find((k) => k.min >= 18);
+    return dewasaKat?.nama || "Dewasa";
+  };
+
   const sections: DisplaySection[] = [];
   if (balita.length > 0) {
-    sections.push({ key: "balita", title: "Balita", rangeLabel: rangeFor("balita", "0–4 tahun"), peserta: buildPeserta(balita) });
+    sections.push({ key: "balita", title: findNamaByMin(4), rangeLabel: rangeFor("balita", "0–4 tahun"), peserta: buildPeserta(balita) });
   }
   if (anakL.length > 0) {
-    sections.push({ key: "anakL", title: "Anak (Laki-laki)", rangeLabel: rangeFor("anak", "5–17 tahun"), peserta: buildPeserta(anakL) });
+    sections.push({ key: "anakL", title: findAnakL(), rangeLabel: rangeFor("anak", "5–17 tahun"), peserta: buildPeserta(anakL) });
   }
   if (anakP.length > 0) {
-    sections.push({ key: "anakP", title: "Anak (Perempuan)", rangeLabel: rangeFor("anak", "5–17 tahun"), peserta: buildPeserta(anakP) });
+    sections.push({ key: "anakP", title: findAnakP(), rangeLabel: rangeFor("anak", "5–17 tahun"), peserta: buildPeserta(anakP) });
   }
   if (dewasa.length > 0) {
-    sections.push({ key: "dewasa", title: "Dewasa", rangeLabel: rangeFor("dewasa", "18+ tahun"), peserta: buildPeserta(dewasa) });
+    sections.push({ key: "dewasa", title: findDewasaNama(), rangeLabel: rangeFor("dewasa", "18+ tahun"), peserta: buildPeserta(dewasa) });
   }
 
   return {

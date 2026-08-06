@@ -10,7 +10,7 @@ import {
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getInitials } from "@/lib/format";
-import { formatTanggalLomba, lombaTimeStatus, type LombaTimeStatus } from "@/lib/format";
+import { formatTanggalLomba, lombaTimeStatus, juaraLabel, type LombaTimeStatus } from "@/lib/format";
 import { SECTION_ICON } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -310,7 +310,7 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
                             </div>
                             {isJuara ? (
                               <span className={`juara-public-label rank-${f.juaraRank}`}>
-                                Juara {f.juaraRank}
+                                {juaraLabel(kid, f.juaraRank as 1 | 2 | 3)}
                               </span>
                             ) : (
                               <span className="juara-public-label" style={{ background: "#F3F4F6", color: "#6B7280" }}>

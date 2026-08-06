@@ -2,12 +2,15 @@
 // Each kategori has its own min/max age range, color, and icon.
 import { all, get, run } from "./client";
 import { toCamelAll } from "./internal";
-import { ensureKategoriColorColumns } from "./migrations";
+import { ensureKategoriColorColumns, ensureGenderSplitKategori } from "./migrations";
 import type { Kategori } from "./types";
 
 export async function getKategori(): Promise<Kategori[]> {
-  // Self-healing: ensure color columns exist before reading them.
+  // Self-healing: ensure color columns + gender-split schema (Balita, Anak L/P,
+  // Ibu-Ibu) are in place before reading. Both are idempotent and cheap after
+  // the first run.
   await ensureKategoriColorColumns();
+  await ensureGenderSplitKategori();
   const rows = await all("SELECT * FROM kategori ORDER BY urutan, min");
   return toCamelAll<Kategori>(rows);
 }

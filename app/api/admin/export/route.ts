@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { getLomba, getPendaftar, getKategori } from "@/lib/db";
 import { isAuthenticated } from "@/lib/auth";
-import { formatTanggalLomba } from "@/lib/format";
+import { formatTanggalLomba, juaraLabel } from "@/lib/format";
 import type { Pendaftar } from "@/lib/db/types";
 
 export async function GET() {
@@ -114,7 +114,7 @@ export async function GET() {
       lomba: l?.nama || "",
       status: p.status,
       finalist: p.isFinalist === 1 ? "Lolos" : p.isFinalist === 0 ? "Gugur" : "Pending",
-      juara: p.juaraRank ? `Juara ${p.juaraRank}` : "",
+      juara: p.juaraRank ? juaraLabel(p.kategoriId, p.juaraRank) : "",
       sumber: p.sumber,
       tanggal: new Date(p.createdAt * 1000).toISOString(),
     };

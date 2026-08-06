@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useNotify } from "@/components/notify-provider";
 import { getInitials } from "@/lib/format";
+import { juaraLabel } from "@/lib/format";
 import { KAT_ICON, DEFAULT_KAT_ICON } from "@/lib/constants";
 
 // Slim pendaftar shape used in the Juara picker.
@@ -490,6 +491,7 @@ function SectionPanel({
             <PendaftarCard
               key={p.id}
               p={p}
+              kategoriId={section.kategoriId}
               isTutup={isTutup}
               isLocked={isLocked}
               isDraft={isDraft}
@@ -510,6 +512,7 @@ function SectionPanel({
 // =================== Pendaftar Card ===================
 function PendaftarCard({
   p,
+  kategoriId,
   isTutup,
   isLocked,
   isDraft,
@@ -521,6 +524,7 @@ function PendaftarCard({
   onClearRank,
 }: {
   p: PendaftarWithJuara;
+  kategoriId: string;
   isTutup: boolean;
   isLocked: boolean;
   isDraft: boolean;
@@ -538,10 +542,12 @@ function PendaftarCard({
   // Compute badge: pending / finalis / juara / gugur
   let statusBadge: React.ReactElement | null = null;
   if (isJuara) {
-    const medal = p.juaraRank === 1 ? "🥇" : p.juaraRank === 2 ? "🥈" : "🥉";
+    // p.juaraRank is narrowed to 1|2|3 here (TS sees isJuara = juaraRank !== null)
+    const rank = p.juaraRank as 1 | 2 | 3;
+    const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : "🥉";
     statusBadge = (
-      <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: ["#FFD700", "#C0C0C0", "#CD7F32"][(p.juaraRank || 1) - 1], color: "white" }}>
-        {medal} Juara {p.juaraRank}
+      <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: ["#FFD700", "#C0C0C0", "#CD7F32"][rank - 1], color: "white" }}>
+        {medal} {juaraLabel(kategoriId, rank)}
       </span>
     );
   } else if (isLolos) {
