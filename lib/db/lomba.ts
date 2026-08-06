@@ -308,13 +308,20 @@ export async function tutupKualifikasiKategori(
     kategoriId
   );
   if ((pendingRow?.c ?? 0) > 0) return false;
-  await run(
-    `UPDATE lomba_kategori SET kualifikasi_tutup_at = ?
-     WHERE lomba_id = ? AND kategori_id = ?`,
-    Date.now(),
-    lombaId,
-    kategoriId
-  );
+  // Use getClient().execute() directly with retry-on-schema-race. The libSQL
+  // HTTP client can return stale schema; retrying with a small delay usually fixes it.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await getClient().execute({
+        sql: "UPDATE lomba_kategori SET kualifikasi_tutup_at = ? WHERE lomba_id = ? AND kategori_id = ?",
+        args: [Date.now(), lombaId, kategoriId],
+      });
+      return true;
+    } catch (e) {
+      if (attempt === 2) throw e;
+      await new Promise((r) => setTimeout(r, 100 * (attempt + 1)));
+    }
+  }
   return true;
 }
 
