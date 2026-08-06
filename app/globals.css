@@ -570,7 +570,14 @@
 /* =================== End admin list juara chip =================== */
 
 /* Mobile page styles */
-.mobile-page { min-height: 100vh; display: flex; flex-direction: column; }
+.mobile-page { min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
+/* Defensive: prevent any child from causing page-level horizontal scroll.
+   The chip strip uses `-mx-4` + `min-w-max` to bleed to viewport edges
+   and can sometimes cause the body to scroll horizontally on certain
+   tablet widths. Adding overflow-x: hidden on mobile-page and app-content
+   prevents the body from scrolling while keeping the sticky app-header's
+   box-shadow visible (we DON'T add it on body itself). */
+.app-content { overflow-x: hidden; }
 .app-header {
   background: linear-gradient(135deg, #E11D1D 0%, #9D1010 100%);
   color: white; padding: 18px 20px; display: flex; align-items: center; justify-content: space-between;
