@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { getLomba, getPendaftar, getKategori } from "@/lib/db";
 import { isAuthenticated } from "@/lib/auth";
+import type { Pendaftar } from "@/lib/db/types";
 
 export async function GET() {
   if (!(await isAuthenticated())) {
@@ -13,15 +14,14 @@ export async function GET() {
     getKategori(),
   ]);
   const katMap = new Map(kats.map((k) => [k.id, k]));
+  const lombaMap = new Map(lombaList.map((l) => [l.id, l]));
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "Lomba Kampung";
   wb.created = new Date();
 
   // =================== Sheet 1: Lomba ===================
-  const wsLomba = wb.addWorksheet("Lomba", {
-    views: [{ state: "frozen", ySplit: 1 }],
-  });
+  const wsLomba = wb.addWorksheet("Lomba", { views: [{ state: "frozen", ySplit: 1 }] });
   wsLomba.columns = [
     { header: "ID", key: "id", width: 6 },
     { header: "Nama", key: "nama", width: 32 },
@@ -55,11 +55,23 @@ export async function GET() {
     });
   }
 
-  // =================== Sheet 2: Peserta ===================
-  const wsPeserta = wb.addWorksheet("Peserta", {
-    views: [{ state: "frozen", ySplit: 1 }],
-  });
-  wsPeserta.columns = [
+  // =================== Peserta-derived sheets ===================
+  // Column shape reused across Peserta, Gugur Kualifikasi, Finalis, Gugur Final
+  type Row = {
+    nomor: string;
+    nama: string;
+    noWa: string;
+    jk: string;
+    kategori: string;
+    umur: number;
+    lomba: string;
+    status: string;
+    finalist: string;
+    juara: string;
+    sumber: string;
+    tanggal: string;
+  };
+  const pesertaColumns: Array<{ header: string; key: keyof Row; width: number }> = [
     { header: "Nomor", key: "nomor", width: 14 },
     { header: "Nama", key: "nama", width: 28 },
     { header: "No WA", key: "noWa", width: 16 },
@@ -68,13 +80,15 @@ export async function GET() {
     { header: "Umur", key: "umur", width: 7 },
     { header: "Lomba", key: "lomba", width: 28 },
     { header: "Status", key: "status", width: 12 },
-    { header: "Hadir", key: "hadir", width: 8 },
+    { header: "Finalist", key: "finalist", width: 11 },
+    { header: "Juara", key: "juara", width: 11 },
     { header: "Sumber", key: "sumber", width: 10 },
     { header: "Tanggal Daftar", key: "tanggal", width: 22 },
   ];
-  for (const p of pendaftar) {
-    const l = lombaList.find((ll) => ll.id === p.lombaId);
-    wsPeserta.addRow({
+
+  function toRow(p: Pendaftar): Row {
+    const l = lombaMap.get(p.lombaId);
+    return {
       nomor: p.nomor,
       nama: p.nama,
       noWa: p.noWa || "",
@@ -83,44 +97,67 @@ export async function GET() {
       umur: p.umur,
       lomba: l?.nama || "",
       status: p.status,
-      hadir: p.hadir ? "Ya" : "Tidak",
+      finalist: p.isFinalist === 1 ? "Lolos" : p.isFinalist === 0 ? "Gugur" : "Pending",
+      juara: p.juaraRank ? `Juara ${p.juaraRank}` : "",
       sumber: p.sumber,
       tanggal: new Date(p.createdAt * 1000).toISOString(),
-    });
+    };
   }
 
-  // =================== Sheet 3: Kategori ===================
-  const wsKat = wb.addWorksheet("Kategori", {
-    views: [{ state: "frozen", ySplit: 1 }],
-  });
-  wsKat.columns = [
-    { header: "ID", key: "id", width: 12 },
-    { header: "Nama", key: "nama", width: 24 },
-    { header: "Umur Min", key: "min", width: 10 },
-    { header: "Umur Max", key: "max", width: 10 },
-    { header: "Urutan", key: "urutan", width: 8 },
-    { header: "Icon", key: "icon", width: 12 },
+  function addPesertaSheet(name: string, filter: (p: Pendaftar) => boolean) {
+    const ws = wb.addWorksheet(name, { views: [{ state: "frozen", ySplit: 1 }] });
+    ws.columns = pesertaColumns;
+    for (const p of pendaftar) {
+      if (filter(p)) ws.addRow(toRow(p));
+    }
+  }
+
+  // Sheet 2: Peserta (semua)
+  addPesertaSheet("Peserta", () => true);
+
+  // Sheet 3: Gugur Kualifikasi — is_finalist=0 (admin klik Gugur saat kualifikasi)
+  addPesertaSheet("Gugur Kualifikasi", (p) => p.isFinalist === 0);
+
+  // Sheet 4: Finalis — lolos kualifikasi (is_finalist=1), termasuk yang jadi Juara
+  addPesertaSheet("Finalis", (p) => p.isFinalist === 1);
+
+  // Sheet 5: Gugur Final — finalist tapi gak jadi Juara (is_finalist=1, juara_rank NULL)
+  addPesertaSheet("Gugur Final", (p) => p.isFinalist === 1 && p.juaraRank === null);
+
+  // Sheet 6: Juara — Juara 1/2/3 per (lomba, kategori)
+  const wsJuara = wb.addWorksheet("Juara", { views: [{ state: "frozen", ySplit: 1 }] });
+  wsJuara.columns = [
+    { header: "Rank", key: "rank", width: 8 },
+    { header: "Nomor", key: "nomor", width: 14 },
+    { header: "Nama", key: "nama", width: 28 },
+    { header: "Jenis Kelamin", key: "jk", width: 14 },
+    { header: "Kategori", key: "kategori", width: 14 },
+    { header: "Umur", key: "umur", width: 7 },
+    { header: "Lomba", key: "lomba", width: 28 },
+    { header: "Tanggal Daftar", key: "tanggal", width: 22 },
   ];
-  for (const k of kats) {
-    wsKat.addRow({
-      id: k.id,
-      nama: k.nama,
-      min: k.min,
-      max: k.max,
-      urutan: k.urutan,
-      icon: k.icon,
-    });
+  for (const p of pendaftar) {
+    if (p.juaraRank !== null) {
+      const l = lombaMap.get(p.lombaId);
+      wsJuara.addRow({
+        rank: p.juaraRank,
+        nomor: p.nomor,
+        nama: p.nama,
+        jk: p.jenisKelamin === "L" ? "Laki-laki" : "Perempuan",
+        kategori: katMap.get(p.kategoriId)?.nama || p.kategoriId,
+        umur: p.umur,
+        lomba: l?.nama || "",
+        tanggal: new Date(p.createdAt * 1000).toISOString(),
+      });
+    }
   }
 
   // =================== Style header rows ===================
-  for (const ws of [wsLomba, wsPeserta, wsKat]) {
+  const allSheets = [wsLomba, ...wb.worksheets.filter((w) => w.name !== "Lomba")];
+  for (const ws of allSheets) {
     const header = ws.getRow(1);
     header.font = { bold: true, color: { argb: "FFFFFFFF" } };
-    header.fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FFE11D1D" }, // lomba red/pink
-    };
+    header.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE11D1D" } };
     header.alignment = { vertical: "middle", horizontal: "left" };
     header.height = 22;
     ws.eachRow((row) => {
@@ -136,7 +173,6 @@ export async function GET() {
   }
 
   const buffer = await wb.xlsx.writeBuffer();
-  // ArrayBuffer → Uint8Array for NextResponse body (works on Node runtime)
   const body = new Uint8Array(buffer as ArrayBuffer);
 
   return new NextResponse(body, {
