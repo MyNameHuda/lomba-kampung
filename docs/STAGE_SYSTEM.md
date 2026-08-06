@@ -5,28 +5,48 @@ pilih finalis di babak kualifikasi (per-pendaftar: Loloskan/Gugur),
 lalu pilih Juara 1/2/3 dari finalis di babak final. Berbasis Juara
 system v2 + v3 kualifikasi flow + v4 schema redesign.
 
-**Status:** ✅ **SHIPPED v4** (all 15 commits landed; live at https://lomba-app.vercel.app).
+**Status:** ✅ **SHIPPED v4** (E2E 28/28 PASS; live at https://lomba-app.vercel.app).
+
 **v4 changes (vs v3):**
 - **Finalist state** stored in NEW column `pendaftar.is_finalist` (tri-state: null=pending, 1=lolos, 0=gugur). Replaces v3's reuse of `juara_rank` for kualifikasi slot.
-- **Per-kategori Tutup** via NEW column `lomba_kategori.kualifikasi_tutup_at` (timestamp). Different kategori in one lomba can be Tutup'd independently.
+- **Per-kategori Tutup** stored as a JSON object in the existing `lomba.phase` TEXT column (added in v3). Schema: `{"k_anak": 1750000000, "k_remaja": null}`. Different kategori in one lomba can be Tutup'd independently.
 - **No more `finalisCount`** — admin decides finalists per-pendaftar (no fixed cap). Gugur button added for explicit elimination.
 - **Tabs per kategori** in admin UI (mobile-friendly, clear separation).
 - **Gugur is reversible** — admin can un-gugur (back to pending).
-- **5 badge variants** on public page (down from 4): Tahap Kualifikasi, Tahap Final, Juara Terpilih, Selesai, Sedang Berlangsung (legacy).
+- **5 badge variants** on public page: Tahap Kualifikasi, Tahap Final, Juara Terpilih, Selesai, Sedang Berlangsung (legacy).
 
-**Schema migrations needed** (one-time via Turso web console or `turso db shell`):
+**Schema migration needed** (one-time via Turso web console or `turso db shell`):
 ```sql
 ALTER TABLE pendaftar ADD COLUMN is_finalist INTEGER;
-ALTER TABLE lomba_kategori ADD COLUMN kualifikasi_tutup_at INTEGER;
 ```
+The app's self-healing `ensureKualifikasiV4Columns()` runs this on every
+DB access. No new column on `lomba_kategori` — see "Why JSON in `lomba.phase`"
+below.
 
-**libSQL HTTP gotcha:** The self-healing `ensureKualifikasiV4Columns()` migration
-in app code works for some endpoints but UPDATE on the new columns still
-fails intermittently due to libSQL HTTP schema cache race. The reliable
-fix is to run the ALTER above via Turso web console (bypasses the HTTP
-client). See memory entry "libSQL HTTP race — workable fix".
+### Why JSON in `lomba.phase` and not a new column?
 
-**Reference:** Juara system v2 (Commit ed323e1..4ab85df), Juara v3 (3d3ed5b..c4e3e6e).
+The original v4 design added `kualifikasi_tutup_at` to `lomba_kategori`
+via ALTER TABLE. That ran into the **libSQL HTTP schema-cache race**:
+the @libsql/client HTTP client in Vercel Lambda maintains per-connection
+schema state that does NOT refresh after ALTER. So one Lambda's UPDATE
+sees the new column, another's sees "no such column", and Turso web
+console ALTERs don't reliably propagate. We tried retries, fresh clients,
+session-pinned transactions, and a debug/migrate endpoint — none fully
+fixed the race.
+
+The fix is structural: **store state in a column that already exists on
+every replica**. `lomba.phase` was added in v3 and is fully replicated,
+so writes to it always succeed. The state is encoded as a small JSON
+object keyed by `kategoriId`. Read path: `parseLombaKategoriTutup(phase)`
+in `lib/db/lomba.ts`. Write path: read-modify-write inside
+`tutupKualifikasiKategori` / `bukaKualifikasiKategori`.
+
+Tradeoff: read-modify-write is not concurrent-safe (two admin clicks at
+the same instant could overwrite each other). For our use case (one
+admin clicking Tutup occasionally) this is fine. If concurrent admin
+becomes a real concern, wrap in a libSQL transaction.
+
+**Reference:** Juara system v2 (Commit ed323e1..4ab85df), Juara v3 (3d3ed5b..c4e3e6e), Juara v4 (e2289cd..a3494f4).
 
 ---
 
