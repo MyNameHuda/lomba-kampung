@@ -322,4 +322,12 @@ export async function ensureGenderSplitKategori(): Promise<void> {
       await run("DELETE FROM kategori WHERE id = 'k_dewasa'");
     }
   }
+
+  // ===== Step 8: delete old k_anak row (orphan after split) =====
+  // After Step 3, all lomba_kategori / lomba_jadwal rows reference
+  // k_anak_l or k_anak_p. pendaftar.kategori_id points to k_anak_l/p
+  // too. So k_anak has zero FK references left and can be safely
+  // removed. Leaving it around would just confuse the admin in the
+  // kategori edit view.
+  await run("DELETE FROM kategori WHERE id = 'k_anak'");
 }
