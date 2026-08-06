@@ -25,28 +25,46 @@ async function loadPjBulk(): Promise<Map<number, Record<string, Pj[]>>> {
 }
 
 // Load per-kategori kualifikasi Tutup state for many lomba at once (avoid N+1).
-// Returns Map<lombaId, Record<kategoriId, tutupAt | null>>. null = not yet Tutup.
-// Defensive: if the column doesn't exist or the SELECT fails (libSQL HTTP race
-// after ALTER), return an empty Map. This way the rest of the system keeps
-// working — v4 per-kategori Tutup will just appear as "not Tutup" until the
-// migration is reliably applied.
-async function loadKategoriTutupBulk(): Promise<Map<number, Record<string, number | null>>> {
-  await ensureKualifikasiV4Columns();
+// Returns Map<lombaId, Record<kategoriId, tutupAt | null>>. null/absent = not yet Tutup.
+//
+// v4: state is stored as a JSON object in the existing `lomba.phase` column
+// (TEXT, added in v3 — fully replicated to all replicas, no schema-cache race).
+// Schema: `{ "k_anak": 1750000000, "k_remaja": null }`.
+//   - absent key  → kualifikasi ongoing
+//   - null value  → explicitly "not Tutup" (sparse semantics; usually omitted)
+//   - number      → unix-ms timestamp when admin clicked Tutup
+//
+// Defensive: if SELECT fails or JSON is malformed, return empty Map. The
+// v4 per-kategori Tutup will just appear as "not Tutup" everywhere.
+export function parseLombaKategoriTutup(phase: string | null | undefined): Record<string, number | null> {
+  if (!phase) return {};
   try {
-    const rows = await all<{ lomba_id: number; kategori_id: string; kualifikasi_tutup_at: number | null }>(
-      "SELECT lomba_id, kategori_id, kualifikasi_tutup_at FROM lomba_kategori"
+    const parsed = JSON.parse(phase);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {};
+    const out: Record<string, number | null> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (typeof v === 'number' && Number.isFinite(v)) out[k] = v;
+      else if (v === null) out[k] = null;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+async function loadKategoriTutupBulk(): Promise<Map<number, Record<string, number | null>>> {
+  try {
+    // Only SELECT lomba with non-null phase (fast — most lomba have NULL).
+    const rows = await all<{ id: number; phase: string | null }>(
+      "SELECT id, phase FROM lomba WHERE phase IS NOT NULL"
     );
     const map = new Map<number, Record<string, number | null>>();
     for (const r of rows) {
-      let m = map.get(r.lomba_id);
-      if (!m) { m = {}; map.set(r.lomba_id, m); }
-      m[r.kategori_id] = r.kualifikasi_tutup_at ?? null;
+      const parsed = parseLombaKategoriTutup(r.phase);
+      if (Object.keys(parsed).length > 0) map.set(r.id, parsed);
     }
     return map;
   } catch {
-    // Column not yet visible to this connection (libSQL HTTP race).
-    // Return empty Map — v4 per-kategori Tutup state will be "not Tutup" everywhere.
-    // The v4 flow will partially break but the rest of the system stays alive.
     return new Map();
   }
 }
@@ -143,7 +161,11 @@ export async function setLombaKategori(lombaId: number, list: LombaKategoriInput
   }
 }
 
-export async function updateLomba(id: number, updates: Partial<Omit<Lomba, "id" | "createdAt" | "pjByKategori" | "kategoriTutupAt">>): Promise<void> {
+export async function updateLomba(id: number, updates: Partial<Omit<Lomba, "id" | "createdAt" | "pjByKategori" | "kategoriTutupAt" | "phase">>): Promise<void> {
+  // Note: `phase` is intentionally NOT updatable via this function. It holds
+  // a JSON object (per-kategori Tutup state) that should only be written via
+  // `tutupKualifikasiKategori` / `bukaKualifikasiKategori`. Letting callers
+  // write arbitrary text here would corrupt the JSON and break v4 phase logic.
   const map: Record<string, string> = {
     nama: "nama",
     emoji: "emoji",
@@ -151,7 +173,6 @@ export async function updateLomba(id: number, updates: Partial<Omit<Lomba, "id" 
     status: "status",
     urutan: "urutan",
     finalisCount: "finalis_count",
-    phase: "phase",
   };
   const sets: string[] = [];
   const vals: (string | number | null)[] = [];
@@ -219,66 +240,6 @@ export async function markLombaSelesai(lombaId: number): Promise<void> {
   );
 }
 
-// =================== Kualifikasi phase (v3 stage system) ===================
-// Stage system v3 adds a kualifikasi round before the final Juara picking.
-// Admin: Mulai Kualifikasi → Loloskan finalis per kategori → Tutup Kualifikasi
-// → Final (picks Juara 1/2/3 from finalists) → Selesaikan.
-// See docs/STAGE_SYSTEM.md for full spec.
-
-/**
- * Set the lomba's phase. Used by Mulai/Tutup Kualifikasi endpoints.
- * Phase transitions: NULL → 'kualifikasi' → 'final' (one-way).
- */
-export async function setLombaPhase(
-  lombaId: number,
-  phase: "kualifikasi" | "final" | null
-): Promise<void> {
-  await run("UPDATE lomba SET phase = ? WHERE id = ?", phase, lombaId);
-}
-
-/**
- * Check if a lomba is ready to "Tutup Kualifikasi" — meaning every eligible
- * kategori with >= 1 pendaftar has >= 1 finalist picked.
- * Returns `{ ok, missingKategori, perKategori }`.
- */
-export async function getKualifikasiReadiness(lombaId: number): Promise<{
-  ok: boolean;
-  missingKategori: string[];
-  perKategori: Record<string, { finalists: number; pendaftar: number }>;
-}> {
-  const l = await getLombaById(lombaId);
-  if (!l) return { ok: false, missingKategori: [], perKategori: {} };
-  const perKategori: Record<string, { finalists: number; pendaftar: number }> = {};
-  const missingKategori: string[] = [];
-  for (const katId of l.kategoriEligible) {
-    // Count pendaftar (all disetujui) — getPendaftarByLomba filters by status, so use direct query
-    const pRows = await all<{ c: number }>(
-      `SELECT COUNT(*) as c FROM pendaftar WHERE lomba_id = ? AND kategori_id = ? AND status = 'disetujui'`,
-      lombaId,
-      katId
-    );
-    const pendaftarCount = Number(pRows[0]?.c ?? 0);
-    // Count finalists (juara_rank 1..finalisCount)
-    const fRows = await all<{ c: number }>(
-      `SELECT COUNT(*) as c FROM pendaftar
-       WHERE lomba_id = ? AND kategori_id = ? AND juara_rank IS NOT NULL AND juara_rank <= ?`,
-      lombaId,
-      katId,
-      l.finalisCount
-    );
-    const finalistsCount = Number(fRows[0]?.c ?? 0);
-    perKategori[katId] = { finalists: finalistsCount, pendaftar: pendaftarCount };
-    if (pendaftarCount > 0 && finalistsCount < 1) {
-      missingKategori.push(katId);
-    }
-  }
-  return {
-    ok: missingKategori.length === 0,
-    missingKategori,
-    perKategori,
-  };
-}
-
 // =================== Per-kategori Tutup Kualifikasi (stage system v4) ===================
 // v4: each kategori can be Tutup'd independently. When Tutup:
 //   - All is_finalist decisions are locked (admin can no longer Loloskan/Gugur)
@@ -287,6 +248,10 @@ export async function getKualifikasiReadiness(lombaId: number): Promise<{
 // This is a per-(lomba, kategori) action — different kategori can be in
 // different phases. Tutup is reversible (admin can "Buka Kualifikasi" to
 // unlock and edit finalist decisions, as long as Juara 1/2/3 not yet picked).
+//
+// Storage: JSON in `lomba.phase` (TEXT column, added in v3, fully replicated
+// to all replicas). Avoids the libSQL HTTP schema-cache race that plagued
+// the original `lomba_kategori.kualifikasi_tutup_at` column approach.
 
 /**
  * Mark a (lomba, kategori) as Tutup. All pendaftar must be decided
@@ -308,20 +273,19 @@ export async function tutupKualifikasiKategori(
     kategoriId
   );
   if ((pendingRow?.c ?? 0) > 0) return false;
-  // Use getClient().execute() directly with retry-on-schema-race. The libSQL
-  // HTTP client can return stale schema; retrying with a small delay usually fixes it.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      await getClient().execute({
-        sql: "UPDATE lomba_kategori SET kualifikasi_tutup_at = ? WHERE lomba_id = ? AND kategori_id = ?",
-        args: [Date.now(), lombaId, kategoriId],
-      });
-      return true;
-    } catch (e) {
-      if (attempt === 2) throw e;
-      await new Promise((r) => setTimeout(r, 100 * (attempt + 1)));
-    }
-  }
+  // Read-modify-write the JSON in lomba.phase. No schema race because the
+  // column already exists on every replica.
+  const row = await get<{ phase: string | null }>(
+    "SELECT phase FROM lomba WHERE id = ?",
+    lombaId
+  );
+  const map = parseLombaKategoriTutup(row?.phase);
+  map[kategoriId] = Date.now();
+  await run(
+    "UPDATE lomba SET phase = ? WHERE id = ?",
+    JSON.stringify(map),
+    lombaId
+  );
   return true;
 }
 
@@ -329,7 +293,6 @@ export async function tutupKualifikasiKategori(
  * Re-open Tutup — admin can edit is_finalist again. Only allowed if no
  * Juara 1/2/3 has been picked yet (otherwise we'd silently clear them).
  * Returns true on success, false if Juara already picked.
- * Retries on libSQL HTTP schema cache race.
  */
 export async function bukaKualifikasiKategori(
   lombaId: number,
@@ -344,17 +307,18 @@ export async function bukaKualifikasiKategori(
     kategoriId
   );
   if ((juaraRow?.c ?? 0) > 0) return false;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      await getClient().execute({
-        sql: "UPDATE lomba_kategori SET kualifikasi_tutup_at = NULL WHERE lomba_id = ? AND kategori_id = ?",
-        args: [lombaId, kategoriId],
-      });
-      return true;
-    } catch (e) {
-      if (attempt === 2) throw e;
-      await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
-    }
-  }
+  // Read-modify-write the JSON in lomba.phase. Remove the key to mark
+  // the kategori as "ongoing" again.
+  const row = await get<{ phase: string | null }>(
+    "SELECT phase FROM lomba WHERE id = ?",
+    lombaId
+  );
+  const map = parseLombaKategoriTutup(row?.phase);
+  delete map[kategoriId];
+  await run(
+    "UPDATE lomba SET phase = ? WHERE id = ?",
+    JSON.stringify(map),
+    lombaId
+  );
   return true;
 }

@@ -31,8 +31,6 @@ export type JenisKelamin = "L" | "P";
 
 export type Pj = { nama: string; kontak: string | null };
 
-export type LombaPhase = "kualifikasi" | "final";
-
 export type Lomba = {
   id: number;
   nama: string;
@@ -47,18 +45,27 @@ export type Lomba = {
   // Kept for backward compat with existing 6 lomba. Not used in v4 logic
   // (finalis count is now decided per-pendaftar via is_finalist).
   finalisCount: number;
-  // Stage system v3 — global lomba phase (DEPRECATED in v4).
-  // v4 uses per-kategori kualifikasi_tutup_at (see Lomba.kategoriTutupAt)
-  // for granular Tutup. Kept for backward compat only.
-  phase: LombaPhase | null;
+  // Stage system v4 — JSON-encoded per-kategori Tutup state stored in
+  // lomba.phase column (TEXT). Schema: `{ "k_anak": 1750000000, "k_remaja": null }`.
+  //
+  // Why a JSON column instead of a new column on lomba_kategori? Because
+  // the libSQL HTTP client in Vercel Lambda has a per-connection schema
+  // cache that does NOT refresh after ALTER. So any ALTER'd column on an
+  // existing table would race — some Lambdas see the column, others don't.
+  // By using the existing lomba.phase column (added in v3, fully replicated
+  // to all replicas), we get writes that always succeed.
+  //
+  // Parsed via `parseLombaKategoriTutup()`. Empty string or null = empty map.
+  // Keyed by kategoriId. null = kualifikasi ongoing; non-null = Tutup at that
+  // timestamp; absent key = kualifikasi ongoing.
+  phase: string | null;
   // PJ per eligible kategori (keyed by kategoriId). Each kategori has 1+ PJs
   // — the array is the list of penanggung jawab assigned to that kategori.
   // Empty array if lomba has no eligible kategori yet.
   pjByKategori: Record<string, Pj[]>;
-  // Stage system v4 — per-kategori Tutup state.
-  // Keyed by kategoriId. null = kualifikasi ongoing (admin can still click
-  // Loloskan/Gugur). non-null timestamp = Tutup clicked; finalist state
-  // locked; admin now picks Juara 1/2/3.
+  // Stage system v4 — per-kategori Tutup state, derived from lomba.phase JSON.
+  // Keyed by kategoriId. null/absent = kualifikasi ongoing; non-null = Tutup
+  // timestamp. Populated by `attachKategoriTutup` in lib/db/lomba.ts.
   kategoriTutupAt: Record<string, number | null>;
 };
 
@@ -95,21 +102,11 @@ export type Pendaftar = {
   updatedAt: number;
 };
 
-// Per-kategori state inside a lomba (lomba_kategori table).
-// v4 adds kualifikasiTutupAt — independent Tutup per kategori.
-export type LombaKategori = {
-  lombaId: number;
-  kategoriId: string;
-  pjNama: string;
-  pjKontak: string | null;
-  urutan: number;
-  // Stage system v4 — per-kategori kualifikasi Tutup timestamp.
-  // null = kualifikasi ongoing for this (lomba, kategori). Admin can still
-  //   click Loloskan/Gugur.
-  // non-null = admin clicked Tutup Kualifikasi for this kategori. Finalist
-  //   state is locked. Admin now picks Juara 1/2/3 from finalists.
-  kualifikasiTutupAt: number | null;
-};
+// Per-kategori Tutup state was previously tracked via a kualifikasi_tutup_at
+// column on lomba_kategori (added in v4 schema). That column had a
+// libSQL HTTP schema-cache race that made updates intermittently fail on
+// some Lambda instances. We now store this state as a JSON object in
+// lomba.phase instead — see Lomba.phase above for the rationale.
 
 // Public display grouping (Balita / Anak L / Anak P / Dewasa) — derived
 // from master `kategori` table (single source of truth). Range and title

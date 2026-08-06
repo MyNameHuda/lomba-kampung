@@ -7,18 +7,12 @@
 //   - ALL pendaftar (status='disetujui') in this kategori have is_finalist
 //     set (no NULLs). Admin must decide Loloskan/Gugur for everyone.
 //
-// Workaround for libSQL HTTP schema cache race: catch the "no such column"
-// error and retry the migration + UPDATE.
+// State storage: JSON in lomba.phase (TEXT column, added in v3, fully
+// replicated). No ALTER on existing tables — no libSQL HTTP schema race.
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { isAuthenticated } from "@/lib/auth";
-import {
-  getLombaById,
-  tutupKualifikasiKategori,
-  getKualifikasiStatusByKategori,
-  ensureKualifikasiV4Columns,
-  getClient,
-} from "@/lib/db";
+import { getLombaById, tutupKualifikasiKategori, getKualifikasiStatusByKategori } from "@/lib/db";
 
 export async function POST(
   _req: Request,
@@ -66,47 +60,30 @@ export async function POST(
     );
   }
 
-  // Try the Tutup with retry-on-schema-race. The libSQL HTTP client
-  // sometimes returns stale schema after ALTER. We force the migration
-  // to run, then attempt the UPDATE. If the UPDATE still fails with
-  // "no such column", we re-attempt the migration a few times before
-  // giving up.
-  let lastError: unknown = null;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    try {
-      await ensureKualifikasiV4Columns();
-      const ok = await tutupKualifikasiKategori(lombaId, kid);
-      if (ok) {
-        revalidatePath("/admin/lomba");
-        revalidatePath(`/admin/lomba/${lombaId}`);
-        revalidatePath(`/admin/lomba/${lombaId}/juara`);
-        revalidatePath(`/lomba/${lombaId}`);
-        return NextResponse.json({
-          ok: true,
-          lombaId,
-          kategoriId: kid,
-          status,
-        });
-      }
-      return NextResponse.json(
-        { error: "Gagal Tutup (cek lagi apakah semua pendaftar sudah diset finalist)" },
-        { status: 400 }
-      );
-    } catch (e) {
-      lastError = e;
-      const msg = String(e);
-      // Schema race — wait and retry with a fresh migration attempt
-      if (msg.includes("no such column") && attempt < 3) {
-        await new Promise((r) => setTimeout(r, 100 * (attempt + 1)));
-        continue;
-      }
-      // Re-throw non-schema errors
-      throw e;
-    }
+  // Tutup updates lomba.phase JSON. The column is fully replicated (no
+  // schema-cache race), so no retry needed.
+  let ok: boolean;
+  try {
+    ok = await tutupKualifikasiKategori(lombaId, kid);
+  } catch (e) {
+    console.error("tutupKualifikasiKategori error:", e);
+    return NextResponse.json({ error: "Gagal update Tutup" }, { status: 500 });
   }
-  console.error("tutup-kualifikasi failed after 4 attempts:", lastError);
-  return NextResponse.json(
-    { error: "Schema belum settle, coba lagi" },
-    { status: 500 }
-  );
+  if (!ok) {
+    return NextResponse.json(
+      { error: "Gagal Tutup (cek lagi apakah semua pendaftar sudah diset finalist)" },
+      { status: 400 }
+    );
+  }
+
+  revalidatePath("/admin/lomba");
+  revalidatePath(`/admin/lomba/${lombaId}`);
+  revalidatePath(`/admin/lomba/${lombaId}/juara`);
+  revalidatePath(`/lomba/${lombaId}`);
+  return NextResponse.json({
+    ok: true,
+    lombaId,
+    kategoriId: kid,
+    status,
+  });
 }

@@ -41,10 +41,9 @@ export {
   setLombaKategori,
   getJuaraReadiness,
   markLombaSelesai,
-  setLombaPhase,
-  getKualifikasiReadiness,
   tutupKualifikasiKategori,
   bukaKualifikasiKategori,
+  parseLombaKategoriTutup,
   type JuaraReadiness,
 } from "./lomba";
 

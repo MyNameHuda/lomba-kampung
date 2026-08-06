@@ -30,9 +30,14 @@ export async function ensureKualifikasiColumns(): Promise<void> {
 // - pendaftar.is_finalist: tri-state (NULL=pending, 1=lolos, 0=gugur)
 //   Replaces v3's reuse of juara_rank for kualifikasi slot. v4 keeps juara_rank
 //   for Juara 1/2/3 only (final phase).
-// - lomba_kategori.kualifikasi_tutup_at: timestamp when admin Tutup Kualifikasi
-//   for this (lomba, kategori). NULL = kualifikasi ongoing for this kategori.
-//   Per-kategori (independen) — different kategori can be in different phases.
+//
+// Per-kategori Tutup state was originally stored in a `kualifikasi_tutup_at`
+// column on `lomba_kategori`. That column has been removed from the schema
+// because the libSQL HTTP client in Vercel Lambda has a per-connection schema
+// cache that does NOT refresh after ALTER, causing UPDATEs on the new column
+// to intermittently fail with "no such column". The state is now stored as a
+// JSON object in the existing `lomba.phase` column instead — see
+// `lib/db/lomba.ts` (`parseLombaKategoriTutup`, `tutupKualifikasiKategori`).
 //
 // Implementation: per-statement with try/catch. The libSQL HTTP client has
 // a known issue where the schema cache is not refreshed after ALTER within
@@ -42,13 +47,10 @@ let v4MigrationPromise: Promise<void> | null = null;
 export function ensureKualifikasiV4Columns(): Promise<void> {
   if (!v4MigrationPromise) {
     v4MigrationPromise = (async () => {
-      // Use session-based execution to ensure ALTER + subsequent reads share
-      // the same connection. The default `client.execute()` may use different
-      // HTTP requests per call, which can hit different replica states.
       const client = getClient();
+      // Only is_finalist now — kualifikasi_tutup_at was abandoned.
       for (const sql of [
         "ALTER TABLE pendaftar ADD COLUMN is_finalist INTEGER",
-        "ALTER TABLE lomba_kategori ADD COLUMN kualifikasi_tutup_at INTEGER",
       ]) {
         try {
           await client.execute({ sql, args: [] });
@@ -59,23 +61,16 @@ export function ensureKualifikasiV4Columns(): Promise<void> {
           }
         }
       }
-      // Verify schema is now visible
+      // Verify schema is now visible. If not, clear global client and retry.
       try {
-        await client.execute({ sql: "SELECT kualifikasi_tutup_at FROM lomba_kategori LIMIT 0", args: [] });
+        await client.execute({ sql: "SELECT is_finalist FROM pendaftar LIMIT 0", args: [] });
       } catch {
-        // Schema still not visible — clear the global client to force a fresh one
         if ((globalThis as { __libsqlClient?: unknown }).__libsqlClient) {
           (globalThis as { __libsqlClient?: unknown }).__libsqlClient = undefined;
         }
-        // One more try with fresh client
-        for (const sql of [
-          "ALTER TABLE pendaftar ADD COLUMN is_finalist INTEGER",
-          "ALTER TABLE lomba_kategori ADD COLUMN kualifikasi_tutup_at INTEGER",
-        ]) {
-          try {
-            await getClient().execute({ sql, args: [] });
-          } catch {}
-        }
+        try {
+          await getClient().execute({ sql: "ALTER TABLE pendaftar ADD COLUMN is_finalist INTEGER", args: [] });
+        } catch {}
       }
     })();
   }
