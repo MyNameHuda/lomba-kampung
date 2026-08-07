@@ -371,15 +371,18 @@ export default function LombaClient({
                   </div>
                 </div>
 
-                {/* Action row */}
+                {/* Action row — each button has distinct semantic color so
+                    they're easy to see at a glance. View + Peserta = blue
+                    (info), Juara = green (success), Edit = primary red,
+                    Hapus = strong red (danger, pushed right). */}
                 <div className="flex items-center gap-1.5 -mb-1">
-                  <Link href={`/lomba/${l.id}`} target="_blank" className="icon-action" title="Lihat publik" style={{ width: 36, height: 36 }}>
+                  <Link href={`/lomba/${l.id}`} target="_blank" className="icon-action info" title="Lihat publik" style={{ width: 36, height: 36 }}>
                     <i className="fas fa-eye"></i>
                   </Link>
-                  <Link href={`/admin/peserta/${l.id}`} className="icon-action" title="Peserta" style={{ width: 36, height: 36 }}>
+                  <Link href={`/admin/peserta/${l.id}`} className="icon-action info" title="Peserta" style={{ width: 36, height: 36 }}>
                     <i className="fas fa-users"></i>
                   </Link>
-                  <Link href={`/admin/lomba/${l.id}/juara`} className="icon-action" title="Pilih Juara" style={{ width: 36, height: 36 }}>
+                  <Link href={`/admin/lomba/${l.id}/juara`} className="icon-action success" title="Pilih Juara" style={{ width: 36, height: 36 }}>
                     <i className="fas fa-trophy"></i>
                   </Link>
                   <button
@@ -393,7 +396,7 @@ export default function LombaClient({
                   <button
                     onClick={() => deleteLomba(l.id, l.nama)}
                     disabled={busy === l.id}
-                    className="icon-action reject ml-auto"
+                    className="icon-action danger ml-auto"
                     title="Hapus"
                     style={{ width: 36, height: 36 }}
                   >

@@ -278,14 +278,30 @@
 .stat-card.success .icon { background: #DCFCE7; color: #15803D; }
 .stat-card.info .icon { background: #DBEAFE; color: #1E40AF; }
 
-/* Icon actions */
+/* Icon actions — visible by default with semantic color variants.
+   Each variant has its own light bg + colored icon (not grey) so the
+   row of action buttons is clearly visible at a glance. Hover fills
+   the bg with the full color + white icon for strong feedback.
+   Variants:
+     - default: primary red theme (edit, generic actions)
+     - .info: blue theme (view, peserta, read-only)
+     - .success: green theme (juara pick, approve)
+     - .warn: amber theme (warning actions)
+     - .danger / .reject: red theme (delete, destructive)
+     - .approve: alias for .success (backward compat) */
 .icon-action {
   width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
-  color: #6B7280; background: #F9FAFB; transition: all 0.2s;
+  color: #9D1010; background: #FCE0E0; transition: all 0.2s;
 }
-.icon-action:hover { background: #FCE0E0; color: #E11D1D; }
-.icon-action.approve:hover { background: #DCFCE7; color: #15803D; }
-.icon-action.reject:hover { background: #FCE0E0; color: #9D1010; }
+.icon-action:hover { background: #E11D1D; color: #FFFFFF; }
+.icon-action.info { color: #1E40AF; background: #DBEAFE; }
+.icon-action.info:hover { background: #1E40AF; color: #FFFFFF; }
+.icon-action.success, .icon-action.approve { color: #15803D; background: #DCFCE7; }
+.icon-action.success:hover, .icon-action.approve:hover { background: #15803D; color: #FFFFFF; }
+.icon-action.warn { color: #92400E; background: #FEF3C7; }
+.icon-action.warn:hover { background: #92400E; color: #FFFFFF; }
+.icon-action.danger, .icon-action.reject { color: #991B1B; background: #FECACA; }
+.icon-action.danger:hover, .icon-action.reject:hover { background: #991B1B; color: #FFFFFF; }
 .row-actions { display: flex; gap: 6px; }
 
 /* =================== Approval list (card layout) =================== */
