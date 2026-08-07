@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useNotify } from "@/components/notify-provider";
 import KatTag from "@/components/kat-tag";
 import LombaModal, { type LombaFormData, type JadwalInput } from "./lomba-modal";
-import { formatTanggalLomba } from "@/lib/format";
+import { formatTanggalLomba, publicKategoriName } from "@/lib/format";
 import type { Pj, PjInput, KategoriSlim as Kat } from "@/lib/types";
 
 // Lomba row shape (server-rendered + PJ populated).
@@ -289,6 +289,24 @@ export default function LombaClient({
             const eligibleKats = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
               .map((kid) => kats.find((k) => k.id === kid))
               .filter((k): k is NonNullable<typeof k> => !!k);
+            // Group by public name so k_anak_l + k_anak_p collapse to a
+            // single "Anak" badge on the admin card (matches home page
+            // and detail-page PJ pattern). First-seen kategori supplies
+            // the badge colors; admin still sees one combined block.
+            type KatGroup = { publicName: string; sampleKat: NonNullable<typeof kats[number]>; kategoriIds: string[] };
+            const groupMap = new Map<string, KatGroup>();
+            const groups: KatGroup[] = [];
+            for (const k of eligibleKats) {
+              const publicName = publicKategoriName(k.id);
+              let g = groupMap.get(publicName);
+              if (!g) {
+                g = { publicName, sampleKat: k, kategoriIds: [k.id] };
+                groupMap.set(publicName, g);
+                groups.push(g);
+              } else {
+                g.kategoriIds.push(k.id);
+              }
+            }
             const js = juaraSummary[l.id];
             const totalPeserta = counts[l.id] || 0;
             const totalJuara = js?.totalJuara || 0;
@@ -324,31 +342,62 @@ export default function LombaClient({
                   </p>
                 )}
 
-                {/* Tags: kategori + tanggal */}
-                {eligibleKats.length > 0 && (
+                {/* Tags: kategori + tanggal. Anak (Laki-laki) + Anak
+                    (Perempuan) collapse into a single "Anak" badge; jadwal
+                    combined into one line (same date → "15 Agu 2026",
+                    different dates → "15 & 16 Agu 2026"). */}
+                {groups.length > 0 && (
                   <div className="flex flex-col gap-1.5">
-                    {eligibleKats.map((k) => {
-                      const j = l.jadwalByKategori?.[k.id];
-                      const hasJadwal = j && j.tanggal != null;
-                      return (
-                        <div key={k.id} className="flex items-center gap-2 flex-wrap">
-                          <KatTag
-                            nama={k.nama}
-                            colorBg={k.colorBg}
-                            colorText={k.colorText}
-                            colorBorder={k.colorBorder}
-                          />
-                          {hasJadwal ? (
-                            <span className="text-[10px] text-[#6B7280] flex items-center gap-1">
-                              <i className="far fa-calendar text-primary"></i>
-                              <span className="font-semibold text-[#374151]">
-                                {formatTanggalLomba(j!.tanggal as number, "short")}
-                              </span>
-                              {j!.jam && <span className="text-[#9CA3AF]">· {j!.jam}</span>}
-                            </span>
-                          ) : (
+                    {groups.map((g) => {
+                      const jadwals = g.kategoriIds
+                        .map((kid) => l.jadwalByKategori?.[kid])
+                        .filter((j): j is JadwalInput & { tanggal: number } => !!j && j.tanggal != null);
+                      if (jadwals.length === 0) {
+                        return (
+                          <div key={g.publicName} className="flex items-center gap-2 flex-wrap">
+                            <KatTag
+                              nama={g.publicName}
+                              colorBg={g.sampleKat.colorBg}
+                              colorText={g.sampleKat.colorText}
+                              colorBorder={g.sampleKat.colorBorder}
+                            />
                             <span className="text-[10px] text-[#9CA3AF] italic">Belum dijadwalkan</span>
-                          )}
+                          </div>
+                        );
+                      }
+                      const allSameDate = jadwals.every((j) => j.tanggal === jadwals[0].tanggal);
+                      const uniqueJams = Array.from(new Set(jadwals.map((j) => j.jam).filter((j): j is string => !!j)));
+                      const showJam = uniqueJams.length > 0;
+                      return (
+                        <div key={g.publicName} className="flex items-center gap-2 flex-wrap">
+                          <KatTag
+                            nama={g.publicName}
+                            colorBg={g.sampleKat.colorBg}
+                            colorText={g.sampleKat.colorText}
+                            colorBorder={g.sampleKat.colorBorder}
+                          />
+                          <span className="text-[10px] text-[#6B7280] flex items-center gap-1">
+                            <i className="far fa-calendar text-primary"></i>
+                            {allSameDate ? (
+                              <>
+                                <span className="font-semibold text-[#374151]">
+                                  {formatTanggalLomba(jadwals[0].tanggal, "short")}
+                                </span>
+                                {showJam && (
+                                  <span className="text-[#9CA3AF]">
+                                    · {uniqueJams.length === 1 ? uniqueJams[0] : uniqueJams.join(", ")}
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              <span className="font-semibold text-[#374151]">
+                                {jadwals
+                                  .map((j) => formatTanggalLomba(j.tanggal, "short"))
+                                  .filter((v, i, arr) => arr.indexOf(v) === i)
+                                  .join(" & ")}
+                              </span>
+                            )}
+                          </span>
                         </div>
                       );
                     })}

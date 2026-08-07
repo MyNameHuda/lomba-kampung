@@ -64,13 +64,18 @@ export function tsToUtcDateStr(ts: number): string {
 }
 
 // =================== Public kategori display ===================
-// On public pages, we collapse k_anak_l + k_anak_p into a single "Anak"
-// category (the gender is stored per-pendaftar and shown in their profile).
-// Admin still sees them as separate kategori (k_anak_l / k_anak_p) for
-// clarity when picking Juara 1/2/3.
+// k_anak_l + k_anak_p collapse to a single "Anak" category everywhere
+// warga-facing (home, success, detail page) AND on the admin card view +
+// the lomba edit modal. The collapse keeps PJ + jadwal on the admin
+// side clean (same PJs handle both genders — showing 2 separate blocks
+// is redundant for the form, and on the card the user just sees one
+// row instead of two). Per-kategori Juara (Juara 1 Laki-laki vs
+// Juara 1 Perempuan) still uses the underlying k_anak_l / k_anak_p
+// ids so admin can pick gender-specific winners; juaraLabel(kategoriId,
+// rank, forPublic) handles the public-side gender-suffix drop.
 //
 // If the admin ever renames a kategori, the public display keeps the
-// hard-coded public name intentionally — public labels are standardized.
+// hard-coded public name intentionally — labels are standardized.
 //
 //   k_balita    → "Balita"
 //   k_anak_l    → "Anak"   ┐ same public name (warga doesn't see L vs P)

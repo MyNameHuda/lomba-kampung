@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { APP_CONFIG } from "@/lib/constants";
-import { dateStrToTs, tsToUtcDateStr } from "@/lib/format";
+import { dateStrToTs, tsToUtcDateStr, publicKategoriName } from "@/lib/format";
 import type { Pj, PjInput, KategoriSlim as Kat } from "@/lib/types";
 
 // Jadwal entry — per-kategori execution date + optional jam.
@@ -180,6 +180,95 @@ export default function LombaModal({
     });
   }
 
+  // Group eligible kategori by public name so k_anak_l + k_anak_p collapse
+  // into a single "Anak" PJ/jadwal block (matches the public detail-page
+  // pattern and the admin card view). The list in `kategoriEligible` is
+  // still per-katId (DB-level), so ops below broadcast to every katId in
+  // the group to keep pjByKategori + jadwalByKategori in sync.
+  type KatGroup = { publicName: string; katIds: string[]; sampleKat?: Kat };
+  const groups: KatGroup[] = useMemo(() => {
+    const seen = new Map<string, KatGroup>();
+    const ordered: KatGroup[] = [];
+    for (const katId of kategoriEligible) {
+      const publicName = publicKategoriName(katId);
+      let g = seen.get(publicName);
+      if (!g) {
+        g = { publicName, katIds: [katId], sampleKat: kats.find((k) => k.id === katId) };
+        seen.set(publicName, g);
+        ordered.push(g);
+      } else {
+        g.katIds.push(katId);
+      }
+    }
+    return ordered;
+  }, [kategoriEligible, kats]);
+
+  // Broadcast helpers — apply the same op to every katId in the group so
+  // pjByKategori[k_anak_l] and pjByKategori[k_anak_p] stay in lockstep.
+  function addPjForGroup(katIds: string[]) {
+    setPjByKategori((prev) => {
+      const next = { ...prev };
+      for (const katId of katIds) {
+        const list = next[katId] || [];
+        if (list.length >= MAX_PJ_PER_KAT) continue;
+        next[katId] = [...list, { nama: "", kontak: null }];
+      }
+      return next;
+    });
+  }
+
+  function removePjForGroup(katIds: string[], index: number) {
+    setPjByKategori((prev) => {
+      // Never let a kategori drop to 0 — check all kats in the group
+      const canRemove = katIds.every((kid) => (prev[kid] || []).length > 1);
+      if (!canRemove) return prev;
+      const next = { ...prev };
+      for (const katId of katIds) {
+        next[katId] = (next[katId] || []).filter((_, i) => i !== index);
+      }
+      return next;
+    });
+  }
+
+  function setPjForGroup(katIds: string[], index: number, field: "nama" | "kontak", value: string) {
+    setPjByKategori((prev) => {
+      const next = { ...prev };
+      for (const katId of katIds) {
+        const list = next[katId] || [];
+        next[katId] = list.map((p, i) =>
+          i === index
+            ? {
+                nama: field === "nama" ? value : p.nama,
+                kontak: field === "kontak" ? (value.trim() || null) : p.kontak,
+              }
+            : p
+        );
+      }
+      return next;
+    });
+  }
+
+  function setJadwalForGroup(katIds: string[], field: "tanggal" | "jam", value: string | null) {
+    setJadwalByKategori((prev) => {
+      const next = { ...prev };
+      for (const katId of katIds) {
+        const cur = next[katId] || { kategoriId: katId, tanggal: null, jam: null };
+        const j: JadwalInput = { ...cur, kategoriId: katId };
+        if (field === "tanggal") {
+          j.tanggal = value ? dateStrToTs(value) : null;
+        } else {
+          j.jam = value || null;
+        }
+        if (j.tanggal === null && j.jam === null) {
+          delete next[katId];
+        } else {
+          next[katId] = j;
+        }
+      }
+      return next;
+    });
+  }
+
   async function submit() {
     setErr("");
     if (!nama.trim()) { setErr("Nama lomba wajib diisi"); return; }
@@ -187,17 +276,18 @@ export default function LombaModal({
     if (finalisCount < 1 || finalisCount > 50) {
       setErr("Finalis per kategori harus 1-50"); return;
     }
-    // Validate: each eligible kategori has ≥1 PJ with non-empty nama
+    // Validate: each eligible kategori has ≥1 PJ with non-empty nama.
+    // Use publicKategoriName so collapsed "Anak" groups show one error
+    // (not separate ones for L and P).
     for (const katId of kategoriEligible) {
       const list = pjByKategori[katId] || [];
+      const name = publicKategoriName(katId);
       if (list.length === 0) {
-        const kat = kats.find((k) => k.id === katId);
-        setErr(`Kategori "${kat?.nama || katId}" minimal 1 PJ`); return;
+        setErr(`Kategori "${name}" minimal 1 PJ`); return;
       }
       for (const pj of list) {
         if (!pj.nama.trim()) {
-          const kat = kats.find((k) => k.id === katId);
-          setErr(`Semua nama PJ di kategori "${kat?.nama || katId}" wajib diisi`); return;
+          setErr(`Semua nama PJ di kategori "${name}" wajib diisi`); return;
         }
       }
     }
@@ -303,10 +393,19 @@ export default function LombaModal({
                 <span className="text-[10px] text-[#6B7280] ml-1 font-normal">bisa lebih dari 1 PJ per kategori</span>
               </label>
               <div className="space-y-3">
-                {kategoriEligible.map((katId) => {
-                  const kat = kats.find((k) => k.id === katId);
-                  const list = pjByKategori[katId] || [];
-                  const jadwal = jadwalByKategori[katId];
+                {/* Group eligible kategori by public name so k_anak_l +
+                    k_anak_p collapse into a single "Anak" PJ block. Same
+                    PJs handle both genders — showing 2 separate blocks
+                    for them is redundant. The broadcast helpers above
+                    keep pjByKategori[k_anak_l] and pjByKategori[k_anak_p]
+                    in sync, so DB-level the per-katId shape is preserved. */}
+                {groups.map((g) => {
+                  // Use the first katId in the group for jadwal read-back
+                  // (the broadcast setter keeps every katId identical
+                  // anyway, so any of them works).
+                  const primaryKatId = g.katIds[0];
+                  const list = pjByKategori[primaryKatId] || [];
+                  const jadwal = jadwalByKategori[primaryKatId];
                   // Convert unix seconds (midnight UTC) to YYYY-MM-DD for
                   // <input type="date">. Stored value is always midnight UTC,
                   // so toISOString() (also UTC) round-trips cleanly.
@@ -314,9 +413,9 @@ export default function LombaModal({
                     ? tsToUtcDateStr(jadwal.tanggal)
                     : "";
                   return (
-                    <div key={katId} className="border-2 border-primary-light rounded-lg p-3 bg-white">
+                    <div key={g.publicName} className="border-2 border-primary-light rounded-lg p-3 bg-white">
                       <div className="text-[11px] font-bold text-primary uppercase tracking-wide mb-2.5 flex items-center justify-between">
-                        <span><i className="fas fa-tag"></i> {kat?.nama || katId}</span>
+                        <span><i className="fas fa-tag"></i> {g.publicName}</span>
                         <span className="text-[10px] text-[#6B7280] normal-case font-normal">{list.length} PJ</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2 mb-2.5 pb-2.5 border-b border-dashed border-[#E5E7EB]">
@@ -326,7 +425,7 @@ export default function LombaModal({
                             type="date"
                             className="input"
                             value={tanggalStr}
-                            onChange={(e) => setJadwal(katId, "tanggal", e.target.value || null)}
+                            onChange={(e) => setJadwalForGroup(g.katIds, "tanggal", e.target.value || null)}
                           />
                         </div>
                         <div>
@@ -335,7 +434,7 @@ export default function LombaModal({
                             type="time"
                             className="input"
                             value={jadwal?.jam || ""}
-                            onChange={(e) => setJadwal(katId, "jam", e.target.value || null)}
+                            onChange={(e) => setJadwalForGroup(g.katIds, "jam", e.target.value || null)}
                           />
                         </div>
                       </div>
@@ -354,20 +453,20 @@ export default function LombaModal({
                               <input
                                 className="input"
                                 value={pj.nama}
-                                onChange={(e) => setPj(katId, idx, "nama", e.target.value)}
+                                onChange={(e) => setPjForGroup(g.katIds, idx, "nama", e.target.value)}
                                 placeholder="Nama PJ (cth: Bu Yuni)"
                               />
                               <input
                                 className="input"
                                 value={pj.kontak || ""}
-                                onChange={(e) => setPj(katId, idx, "kontak", e.target.value)}
+                                onChange={(e) => setPjForGroup(g.katIds, idx, "kontak", e.target.value)}
                                 placeholder="0812-..."
                               />
                             </div>
                             {list.length > 1 && (
                               <button
                                 type="button"
-                                onClick={() => removePj(katId, idx)}
+                                onClick={() => removePjForGroup(g.katIds, idx)}
                                 className="w-9 h-9 rounded-lg bg-[#FEE2E2] text-[#991B1B] flex items-center justify-center hover:bg-[#FECACA] flex-shrink-0"
                                 title="Hapus PJ ini"
                                 aria-label="Hapus PJ"
@@ -381,7 +480,7 @@ export default function LombaModal({
                       {list.length < MAX_PJ_PER_KAT && (
                         <button
                           type="button"
-                          onClick={() => addPj(katId)}
+                          onClick={() => addPjForGroup(g.katIds)}
                           className="mt-2.5 w-full text-[12px] font-semibold text-primary border-2 border-dashed border-primary-light rounded-lg py-1.5 hover:bg-primary-light hover:border-primary transition-colors"
                         >
                           <i className="fas fa-plus text-[10px]"></i> Tambah PJ
