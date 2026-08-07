@@ -50,3 +50,5 @@ out
 # Process / capture logs
 /stderr.txt
 /stdout.txt
+/dev.log
+/build.log
