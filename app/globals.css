@@ -657,18 +657,19 @@ html, body { overflow-x: clip; max-width: 100vw; }
 }
 
 /* Radio group — gender picker (Laki-laki / Perempuan).
-   Inactive state is intentionally very subtle (transparent bg, very
-   light border, muted text) so warga's eye is drawn to the active
-   option. Hover gives gentle feedback. Active state = full primary. */
+   Inactive is a normal interactive card (white bg, visible border,
+   readable text) so warga never misses the option exists. Active
+   stands out with full primary + box-shadow. Eye still drawn to
+   active, but unselected is clearly clickable, not invisible. */
 .radio-group { display: flex; gap: 8px; }
 .radio-option {
-  flex: 1; padding: 12px 10px; border: 1.5px solid #F3F4F6; border-radius: 12px;
-  text-align: center; font-size: 13px; font-weight: 600; color: #9CA3AF;
-  background: transparent; cursor: pointer;
+  flex: 1; padding: 12px 10px; border: 1.5px solid #E5E7EB; border-radius: 12px;
+  text-align: center; font-size: 13px; font-weight: 600; color: #4B5563;
+  background: #FFFFFF; cursor: pointer;
   transition: all 0.2s;
 }
 .radio-option:hover {
-  background: #F9FAFB; border-color: #D1D5DB; color: #6B7280;
+  background: #F9FAFB; border-color: #9CA3AF; color: #1F2937;
 }
 .radio-option.active {
   background: #FCE0E0; border-color: #E11D1D; color: #E11D1D;
