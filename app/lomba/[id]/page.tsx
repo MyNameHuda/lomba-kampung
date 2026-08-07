@@ -201,27 +201,70 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
                 <i className="far fa-calendar text-primary"></i> Jadwal Pelaksanaan
               </h3>
               {(() => {
-                const jadwals = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
-                  .map((kid) => ({ kid, jadwal: l.jadwalByKategori?.[kid] }))
-                  .filter((x) => x.jadwal && (x.jadwal.tanggal != null || x.jadwal.jam != null));
-                if (jadwals.length === 0) {
+                // Group eligible kategori by public name so k_anak_l +
+                // k_anak_p collapse into a single "Anak" jadwal card
+                // (matches the PJ section right below). For each group
+                // we collect all jadwals across its katIds; if both
+                // genders share the same tanggal the card shows one
+                // date, if they differ we list each on its own line
+                // (weekday-long format is verbose so " & " join is too
+                // dense — separate lines are easier to scan).
+                type JadwalGroup = {
+                  publicName: string;
+                  jadwals: Array<{ tanggal: number; jam: string | null }>;
+                };
+                const seen = new Map<string, JadwalGroup & { sampleKat?: ReturnType<typeof katMap.get> }>();
+                const ordered: Array<JadwalGroup & { sampleKat?: ReturnType<typeof katMap.get> }> = [];
+                for (const kid of (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])) {
+                  const publicName = publicKategoriName(kid);
+                  let g = seen.get(publicName);
+                  if (!g) {
+                    g = { publicName, sampleKat: katMap.get(kid), jadwals: [] };
+                    seen.set(publicName, g);
+                    ordered.push(g);
+                  }
+                  const j = l.jadwalByKategori?.[kid];
+                  if (j && j.tanggal != null) {
+                    g.jadwals.push({ tanggal: j.tanggal, jam: j.jam });
+                  }
+                }
+                const withJadwal = ordered.filter((g) => g.jadwals.length > 0);
+                if (withJadwal.length === 0) {
                   return <div className="text-center py-3 text-[#6B7280] text-sm">Belum ada jadwal yang diumumkan</div>;
                 }
                 return (
                   <div className="space-y-2.5 mt-2">
-                    {jadwals.map(({ kid, jadwal }) => {
-                      const kat = katMap.get(kid);
+                    {withJadwal.map((g) => {
+                      const allSameDate = g.jadwals.every((j) => j.tanggal === g.jadwals[0].tanggal);
+                      const uniqueDates = Array.from(new Set(g.jadwals.map((j) => j.tanggal)));
+                      const uniqueJams = Array.from(
+                        new Set(g.jadwals.map((j) => j.jam).filter((j): j is string => !!j))
+                      );
                       return (
-                        <div key={kid} className="flex items-center gap-3 p-3 bg-[#F9FAFB] rounded-lg">
+                        <div key={g.publicName} className="flex items-center gap-3 p-3 bg-[#F9FAFB] rounded-lg">
                           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent text-white flex items-center justify-center flex-shrink-0">
                             <i className="far fa-calendar text-base"></i>
                           </div>
                           <div className="flex-1 min-w-0 flex flex-col gap-0.5 leading-snug">
-                            {kat && <div className="text-[10px] font-bold text-primary uppercase tracking-wide">{kat.nama}</div>}
-                            {jadwal!.tanggal != null && (
-                              <div className="font-semibold text-[13px]">{formatTanggalLomba(jadwal!.tanggal as number, "weekday-long")}</div>
+                            <div className="text-[10px] font-bold text-primary uppercase tracking-wide">
+                              {g.publicName}
+                            </div>
+                            {allSameDate ? (
+                              <div className="font-semibold text-[13px]">
+                                {formatTanggalLomba(g.jadwals[0].tanggal, "weekday-long")}
+                              </div>
+                            ) : (
+                              <div className="font-semibold text-[13px] flex flex-col gap-0.5">
+                                {uniqueDates.map((t) => (
+                                  <span key={t}>{formatTanggalLomba(t, "weekday-long")}</span>
+                                ))}
+                              </div>
                             )}
-                            {jadwal!.jam && <div className="text-[11px] text-[#6B7280]">Pukul {jadwal!.jam} WIB</div>}
+                            {uniqueJams.length > 0 && (
+                              <div className="text-[11px] text-[#6B7280]">
+                                Pukul {uniqueJams.join(", ")} WIB
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
