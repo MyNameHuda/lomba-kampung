@@ -10,7 +10,7 @@ import {
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getInitials } from "@/lib/format";
-import { formatTanggalLomba, lombaTimeStatus, juaraLabel, publicKategoriName, type LombaTimeStatus } from "@/lib/format";
+import { formatTanggalLomba, lombaTimeStatus, juaraLabel, displayKategoriName, type LombaTimeStatus } from "@/lib/format";
 import { SECTION_ICON } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -216,7 +216,12 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
                 const seen = new Map<string, JadwalGroup & { sampleKat?: ReturnType<typeof katMap.get> }>();
                 const ordered: Array<JadwalGroup & { sampleKat?: ReturnType<typeof katMap.get> }> = [];
                 for (const kid of (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])) {
-                  const publicName = publicKategoriName(kid);
+                  const sampleKat = katMap.get(kid);
+                  // displayKategoriName collapses k_anak_l + k_anak_p → "Anak";
+                  // for any other kat (including user-added k_<timestamp> ids)
+                  // it returns the real DB nama so the card header shows
+                  // "Umum" instead of the raw id.
+                  const publicName = displayKategoriName(kid, sampleKat);
                   let g = seen.get(publicName);
                   if (!g) {
                     g = { publicName, sampleKat: katMap.get(kid), jadwals: [] };
@@ -305,7 +310,10 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
                   if (!kat) continue;
                   const pjs = pjEntries.filter((e) => e.katId === kid).map((e) => e.pj);
                   if (pjs.length === 0) continue;
-                  const publicName = publicKategoriName(kid);
+                  // displayKategoriName collapses k_anak_l + k_anak_p → "Anak";
+                  // for any other kat it returns the real DB nama so the
+                  // section header shows "Umum" instead of the raw id.
+                  const publicName = displayKategoriName(kid, kat);
                   let group = seen.get(publicName);
                   if (!group) {
                     group = { publicName, sampleKat: kat, pjs: [] };

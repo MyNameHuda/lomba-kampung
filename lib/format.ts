@@ -93,14 +93,44 @@ export function publicKategoriName(kategoriId: string): string {
 }
 
 /**
+ * Display name for a kategori in collapsed/single-kat sections where we
+ * have access to the full kategori row (e.g. PJ section, Jadwal card).
+ *
+ * Rules:
+ * - k_anak_l + k_anak_p → "Anak" (collapse, gender stored per-pendaftar)
+ * - Otherwise → use the actual `kat.nama` from the DB so user-added
+ *   kategori with custom ids (`k_<timestamp>`) show their real label,
+ *   not the raw id
+ * - Last fallback: publicKategoriName() (handles k_balita, k_dewasa_p
+ *   if kat wasn't passed) or the raw id
+ *
+ * Always prefer this over publicKategoriName() when you have the kat row.
+ */
+export function displayKategoriName(
+  kategoriId: string,
+  kat?: { nama: string } | null
+): string {
+  if (kategoriId === "k_anak_l" || kategoriId === "k_anak_p") return "Anak";
+  if (kat?.nama) return kat.nama;
+  return KATEGORI_PUBLIC_NAME[kategoriId] ?? kategoriId;
+}
+
+/**
  * Group a list of kategoriIds by their public name, preserving first-seen
  * order. Returns a list of `{ publicName, kategoriIds }` pairs. Used to
  * collapse L/P sub-kategori into a single section on public pages.
+ *
+ * Pass an optional `kats` map (kategoriId → kat) so user-added kats
+ * (e.g. `k_1786106852338` nama "Umum") display their real nama instead
+ * of falling back to the raw id via the publicKategoriName default.
  */
-export function groupKategoriByPublicName(kategoriIds: string[]): Array<{ publicName: string; kategoriIds: string[] }> {
+export function groupKategoriByPublicName(
+  kategoriIds: string[],
+  kats?: Map<string, { nama: string } | null | undefined>
+): Array<{ publicName: string; kategoriIds: string[] }> {
   const groups = new Map<string, string[]>();
   for (const kid of kategoriIds) {
-    const name = publicKategoriName(kid);
+    const name = displayKategoriName(kid, kats?.get(kid));
     if (!groups.has(name)) groups.set(name, []);
     groups.get(name)!.push(kid);
   }

@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import KatTag from "@/components/kat-tag";
 import { KAT_ICON, DEFAULT_KAT_ICON } from "@/lib/constants";
-import { formatTanggalLomba, lombaTimeStatus, publicKategoriName, groupKategoriByPublicName } from "@/lib/format";
+import { formatTanggalLomba, lombaTimeStatus, displayKategoriName, groupKategoriByPublicName } from "@/lib/format";
 import type { LombaSlim as Lomba, KategoriSlim as Kat } from "@/lib/types";
 
 export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; kategori: Kat[] }) {
@@ -20,19 +20,21 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
   // Count lomba per PUBLIC NAME (for chip badges) — k_anak_l + k_anak_p
   // both map to "Anak" so they share one count. Only count lomba once per
   // public name even if it has multiple sub-kategori in that group.
+  // displayKategoriName() with `kat` ensures user-added kategori (e.g.
+  // id `k_1786106852338` nama "Umum") use the real nama, not the raw id.
   const countByPublicName = useMemo(() => {
     const m = new Map<string, number>();
     for (const l of lomba) {
       const publicNames = new Set<string>();
       for (const kid of Array.isArray(l.kategoriEligible) ? l.kategoriEligible : []) {
-        publicNames.add(publicKategoriName(kid));
+        publicNames.add(displayKategoriName(kid, katMap.get(kid)));
       }
       for (const name of publicNames) {
         m.set(name, (m.get(name) ?? 0) + 1);
       }
     }
     return m;
-  }, [lomba]);
+  }, [lomba, katMap]);
 
   // Only show public-name chips that have at least 1 lomba
   // Preserve insertion order from the master kategori list (so the chip
@@ -41,7 +43,7 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
     const seen = new Set<string>();
     const out: { publicName: string; sample: Kat }[] = [];
     for (const k of kategori) {
-      const publicName = publicKategoriName(k.id);
+      const publicName = displayKategoriName(k.id, k);
       if (seen.has(publicName)) continue;
       seen.add(publicName);
       if ((countByPublicName.get(publicName) ?? 0) > 0) {
@@ -60,16 +62,16 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
       if (activeKat) {
         // activeKat is a public name; match if any eligible kategori
         // maps to this public name (e.g. "Anak" matches both k_anak_l
-        // and k_anak_p).
+        // and k_anak_p, "Umum" matches k_1786106852338).
         const hasMatch = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : []).some(
-          (kid) => publicKategoriName(kid) === activeKat
+          (kid) => displayKategoriName(kid, katMap.get(kid)) === activeKat
         );
         if (!hasMatch) return false;
       }
       if (q && !l.nama.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [lomba, activeKat, search]);
+  }, [lomba, activeKat, search, katMap]);
 
   const isFiltered = search.trim() !== "" || activeKat !== null;
 
@@ -240,7 +242,8 @@ export default function HomeClient({ lomba, kategori }: { lomba: Lomba[]; katego
                   {eligibleKats.length > 0 && (
                     <div className="flex flex-col gap-1.5">
                       {groupKategoriByPublicName(
-                        (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : []).filter((kid) => !!katMap.get(kid))
+                        (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : []).filter((kid) => !!katMap.get(kid)),
+                        katMap
                       ).map(({ publicName, kategoriIds }) => {
                         // Use the first eligible kat as the color/icon source
                         // for the KatTag (any sub-kategori in the group shares

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { APP_CONFIG } from "@/lib/constants";
-import { dateStrToTs, tsToUtcDateStr, publicKategoriName } from "@/lib/format";
+import { dateStrToTs, tsToUtcDateStr, displayKategoriName } from "@/lib/format";
 import type { Pj, PjInput, KategoriSlim as Kat } from "@/lib/types";
 
 // Jadwal entry — per-kategori execution date + optional jam.
@@ -134,10 +134,14 @@ export default function LombaModal({
     const seen = new Map<string, KatGroup>();
     const ordered: KatGroup[] = [];
     for (const katId of kategoriEligible) {
-      const publicName = publicKategoriName(katId);
+      const sampleKat = kats.find((k) => k.id === katId);
+      // displayKategoriName collapses k_anak_l + k_anak_p → "Anak",
+      // but for any other kat (including user-added ones like
+      // k_<timestamp> with nama "Umum") it returns the real DB name.
+      const publicName = displayKategoriName(katId, sampleKat);
       let g = seen.get(publicName);
       if (!g) {
-        g = { publicName, katIds: [katId], sampleKat: kats.find((k) => k.id === katId) };
+        g = { publicName, katIds: [katId], sampleKat };
         seen.set(publicName, g);
         ordered.push(g);
       } else {
@@ -221,11 +225,12 @@ export default function LombaModal({
       setErr("Finalis per kategori harus 1-50"); return;
     }
     // Validate: each eligible kategori has ≥1 PJ with non-empty nama.
-    // Use publicKategoriName so collapsed "Anak" groups show one error
-    // (not separate ones for L and P).
+    // Use displayKategoriName so collapsed "Anak" groups show one error
+    // (not separate ones for L and P) and user-added kats show their
+    // real nama (e.g. "Umum") not the raw id.
     for (const katId of kategoriEligible) {
       const list = pjByKategori[katId] || [];
-      const name = publicKategoriName(katId);
+      const name = displayKategoriName(katId, kats.find((k) => k.id === katId));
       if (list.length === 0) {
         setErr(`Kategori "${name}" minimal 1 PJ`); return;
       }

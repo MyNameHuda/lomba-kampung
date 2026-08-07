@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useNotify } from "@/components/notify-provider";
 import KatTag from "@/components/kat-tag";
 import LombaModal, { type LombaFormData, type JadwalInput } from "./lomba-modal";
-import { formatTanggalLomba, publicKategoriName } from "@/lib/format";
+import { formatTanggalLomba, displayKategoriName } from "@/lib/format";
 import type { Pj, PjInput, KategoriSlim as Kat } from "@/lib/types";
 
 // Lomba row shape (server-rendered + PJ populated).
@@ -297,7 +297,10 @@ export default function LombaClient({
             const groupMap = new Map<string, KatGroup>();
             const groups: KatGroup[] = [];
             for (const k of eligibleKats) {
-              const publicName = publicKategoriName(k.id);
+              // displayKategoriName collapses k_anak_l + k_anak_p → "Anak";
+              // for any other kat (including user-added k_<timestamp> ids)
+              // it returns the real DB nama so badges don't show the raw id.
+              const publicName = displayKategoriName(k.id, k);
               let g = groupMap.get(publicName);
               if (!g) {
                 g = { publicName, sampleKat: k, kategoriIds: [k.id] };
