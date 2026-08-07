@@ -124,62 +124,6 @@ export default function LombaModal({
     });
   }
 
-  function setJadwal(katId: string, field: "tanggal" | "jam", value: string | null) {
-    setJadwalByKategori((prev) => {
-      const cur = prev[katId] || { kategoriId: katId, tanggal: null, jam: null };
-      const next: JadwalInput = { ...cur, kategoriId: katId };
-      if (field === "tanggal") {
-        // value: "YYYY-MM-DD" from <input type="date"> or null when cleared.
-        // Treat as midnight UTC (calendar day, not moment in viewer's TZ) — see
-        // dateStrToTs in lib/format.ts. This avoids the +1/-1 day off-by-one
-        // bug when the user is in a TZ other than Asia/Jakarta.
-        if (!value) next.tanggal = null;
-        else next.tanggal = dateStrToTs(value);
-      } else {
-        // value: "HH:MM" or null
-        next.jam = value || null;
-      }
-      // Drop entry if both null
-      if (next.tanggal === null && next.jam === null) {
-        const { [katId]: _, ...rest } = prev;
-        return rest;
-      }
-      return { ...prev, [katId]: next };
-    });
-  }
-
-  function addPj(katId: string) {
-    setPjByKategori((prev) => {
-      const list = prev[katId] || [];
-      if (list.length >= MAX_PJ_PER_KAT) return prev;
-      return { ...prev, [katId]: [...list, { nama: "", kontak: null }] };
-    });
-  }
-
-  function removePj(katId: string, index: number) {
-    setPjByKategori((prev) => {
-      const list = prev[katId] || [];
-      const next = list.filter((_, i) => i !== index);
-      if (next.length === 0) return prev; // never let a kategori go to 0 — UI shows warning
-      return { ...prev, [katId]: next };
-    });
-  }
-
-  function setPj(katId: string, index: number, field: "nama" | "kontak", value: string) {
-    setPjByKategori((prev) => {
-      const list = prev[katId] || [];
-      const next = list.map((p, i) =>
-        i === index
-          ? {
-              nama: field === "nama" ? value : p.nama,
-              kontak: field === "kontak" ? (value.trim() || null) : p.kontak,
-            }
-          : p
-      );
-      return { ...prev, [katId]: next };
-    });
-  }
-
   // Group eligible kategori by public name so k_anak_l + k_anak_p collapse
   // into a single "Anak" PJ/jadwal block (matches the public detail-page
   // pattern and the admin card view). The list in `kategoriEligible` is
