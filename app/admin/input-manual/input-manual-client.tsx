@@ -107,6 +107,21 @@ export default function InputManualClient({
   // (with k_anak_l + k_anak_p collapsed into one "Anak" chip).
   const [selectedKategori, setSelectedKategori] = useState<string>("all");
 
+  // v3: dropdown state for the picker. Only one group open at a time.
+  // null = all groups collapsed. Keyed by LombaGroup.key.
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
+
+  // When the filter chip narrows to a single kategori, force-open
+  // that group so admin doesn't have to click an already-isolated
+  // card. When chip is "all", reset to closed (default view).
+  useEffect(() => {
+    if (selectedKategori === "all") {
+      setOpenGroup(null);
+    } else {
+      setOpenGroup(selectedKategori);
+    }
+  }, [selectedKategori]);
+
   // Local peserta list — mirrors server prop, allows optimistic updates
   // after edit/delete without a full router.refresh.
   const [pesertaList, setPesertaList] = useState<PesertaRow[]>([]);
@@ -181,6 +196,13 @@ export default function InputManualClient({
     const k = eligibleKats.find((x) => x.id === id);
     if (k) setUmur(k.autoAge ? k.min : null);
     else setUmur(null);
+  }
+
+  // v3: toggle a picker group's open state. Only one group open at a
+  // time — opening a new one auto-closes the previously open one.
+  // Clicking the currently-open group collapses it.
+  function toggleGroup(key: string) {
+    setOpenGroup((curr) => (curr === key ? null : key));
   }
 
   async function submit(e: FormEvent) {
@@ -371,6 +393,8 @@ export default function InputManualClient({
                   onSelect={changeLombaId}
                   allCount={lombaList.length}
                   currentKategori={selectedKategori}
+                  openGroup={openGroup}
+                  onToggleGroup={toggleGroup}
                 />
               </div>
 
@@ -665,10 +689,20 @@ function Chip({
 }
 
 // =====================================================================
-// Lomba picker (v2) — each kategori group is a distinct colored card
-// with a prominent header band. Lomba buttons sit inside as white tiles
-// against the kategori tint, so the separator between groups is
-// impossible to miss while scanning.
+// Lomba picker (v3) — collapsible dropdown per kategori
+// =====================================================================
+// v3 behavior:
+// - All groups are closed by default (openGroup === null).
+// - Clicking a group header opens that group; clicking it again closes.
+// - Only one group open at a time (auto-close on opening another).
+// - When a filter chip narrows to a single kategori, that group is
+//   force-opened (handled by useEffect in the parent).
+//
+// The header is a clickable band with kategori icon, name, count badge,
+// and a rotating chevron. Lomba buttons only render when the group is
+// open. Active lomba group also gets a primary-red border so admin
+// can find their selection even if it's in a closed group (the right
+// side red card shows the full lomba context too).
 // =====================================================================
 function LombaPicker({
   groups,
@@ -676,12 +710,16 @@ function LombaPicker({
   onSelect,
   allCount,
   currentKategori,
+  openGroup,
+  onToggleGroup,
 }: {
   groups: LombaGroup[];
   selectedId: number | null;
   onSelect: (id: number) => void;
   allCount: number;
   currentKategori: string;
+  openGroup: string | null;
+  onToggleGroup: (key: string) => void;
 }) {
   if (allCount === 0) {
     return (
@@ -691,15 +729,10 @@ function LombaPicker({
     );
   }
 
-  // When filter narrows to a single group, the group label is already
-  // visible in the active chip at the top — skip the redundant header
-  // band to save vertical space, but keep the colored card so the
-  // picker still feels separated from the form fields above.
-  const showHeader = groups.length > 1 || currentKategori === "all";
-
   return (
     <div className="space-y-2.5">
       {groups.map((group) => {
+        const isOpen = openGroup === group.key;
         const hasActive = group.lomba.some((l) => l.id === selectedId);
         return (
           <div
@@ -711,73 +744,85 @@ function LombaPicker({
               borderWidth: hasActive ? 2 : 1.5,
             }}
           >
-            {showHeader && (
-              <div
-                className="px-3 py-2 flex items-center gap-2 border-b"
-                style={{ borderColor: group.borderColor }}
+            {/* Clickable header — toggles this group's open state */}
+            <button
+              type="button"
+              onClick={() => onToggleGroup(group.key)}
+              aria-expanded={isOpen}
+              className="w-full px-3 py-2 flex items-center gap-2 hover:brightness-95 transition-all text-left"
+              style={{ borderBottom: isOpen ? `1px solid ${group.borderColor}` : "1px solid transparent" }}
+            >
+              <span
+                className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] flex-shrink-0"
+                style={{ background: group.textColor, color: "white" }}
+                aria-hidden="true"
               >
-                <span
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] flex-shrink-0"
-                  style={{ background: group.textColor, color: "white" }}
-                  aria-hidden="true"
-                >
-                  <i className={`fas ${group.icon}`}></i>
-                </span>
-                <span
-                  className="text-[11px] font-extrabold uppercase tracking-wider truncate"
-                  style={{ color: group.textColor }}
-                >
-                  {group.displayName}
-                </span>
-                <span
-                  className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1"
-                  style={{ background: "white", color: group.textColor, border: `1px solid ${group.borderColor}` }}
-                >
-                  <i className="fas fa-trophy text-[9px]"></i>
-                  {group.lomba.length} lomba
-                </span>
-              </div>
-            )}
-            <div className="p-1.5 space-y-1">
-              {group.lomba.length === 0 ? (
-                <div className="text-center py-3 text-[11px] text-[#6B7280]">
-                  Tidak ada lomba.
-                </div>
-              ) : (
-                group.lomba.map((l) => {
-                  const active = l.id === selectedId;
-                  return (
-                    <button
-                      key={l.id}
-                      type="button"
-                      onClick={() => onSelect(l.id)}
-                      className={`w-full text-left p-2 rounded-lg border transition-all flex items-center gap-2.5 ${
-                        active
-                          ? "border-primary bg-white shadow-sm"
-                          : "border-transparent bg-white/60 hover:bg-white hover:border-white"
-                      }`}
-                    >
-                      <span className="text-xl leading-none flex-shrink-0">{l.emoji}</span>
-                      <span
-                        className={`flex-1 text-[13px] truncate ${
-                          active ? "font-bold text-primary" : "font-semibold text-[#1F2937]"
+                <i className={`fas ${group.icon}`}></i>
+              </span>
+              <span
+                className="text-[11px] font-extrabold uppercase tracking-wider truncate"
+                style={{ color: group.textColor }}
+              >
+                {group.displayName}
+              </span>
+              <span
+                className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 flex-shrink-0"
+                style={{ background: "white", color: group.textColor, border: `1px solid ${group.borderColor}` }}
+              >
+                <i className="fas fa-trophy text-[9px]"></i>
+                {group.lomba.length} lomba
+              </span>
+              <i
+                className={`fas fa-chevron-down text-[10px] flex-shrink-0 transition-transform duration-200 ${
+                  isOpen ? "rotate-180" : ""
+                }`}
+                style={{ color: group.textColor }}
+                aria-hidden="true"
+              ></i>
+            </button>
+            {/* Body — only render when this group is the open one */}
+            {isOpen && (
+              <div className="p-1.5 space-y-1">
+                {group.lomba.length === 0 ? (
+                  <div className="text-center py-3 text-[11px] text-[#6B7280]">
+                    Tidak ada lomba.
+                  </div>
+                ) : (
+                  group.lomba.map((l) => {
+                    const active = l.id === selectedId;
+                    return (
+                      <button
+                        key={l.id}
+                        type="button"
+                        onClick={() => onSelect(l.id)}
+                        className={`w-full text-left p-2 rounded-lg border transition-all flex items-center gap-2.5 ${
+                          active
+                            ? "border-primary bg-white shadow-sm"
+                            : "border-transparent bg-white/60 hover:bg-white hover:border-white"
                         }`}
                       >
-                        {l.nama}
-                      </span>
-                      {l.status === "selesai" && (
-                        <span className="text-[9px] bg-[#F3F4F6] text-[#6B7280] px-1.5 py-0.5 rounded font-bold uppercase flex-shrink-0">
-                          Selesai
+                        <span className="text-xl leading-none flex-shrink-0">{l.emoji}</span>
+                        <span
+                          className={`flex-1 text-[13px] truncate ${
+                            active ? "font-bold text-primary" : "font-semibold text-[#1F2937]"
+                          }`}
+                        >
+                          {l.nama}
                         </span>
-                      )}
-                      {active && (
-                        <i className="fas fa-circle-check text-primary text-xs flex-shrink-0"></i>
-                      )}
-                    </button>
-                  );
-                })
-              )}
-            </div>
+                        {l.status === "selesai" && (
+                          <span className="text-[9px] bg-[#F3F4F6] text-[#6B7280] px-1.5 py-0.5 rounded font-bold uppercase flex-shrink-0">
+                            Selesai
+                          </span>
+                        )}
+                        {active && (
+                          <i className="fas fa-circle-check text-primary text-xs flex-shrink-0"></i>
+                        )}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
           </div>
         );
       })}
