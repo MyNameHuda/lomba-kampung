@@ -150,9 +150,21 @@ export async function countPendaftarHadir(lombaId?: number): Promise<number> {
 }
 
 export async function countPendaftarByLomba(lombaId: number, status?: PendaftarStatus): Promise<number> {
+  // When status is explicit, count that exact status (e.g. "disetujui"
+  // for the public home "X peserta" badge).
+  //
+  // When status is omitted, count "active" pendaftar (pending + disetujui)
+  // — i.e. exclude `ditolak`. Declined pendaftar are removed from the
+  // approval section, so they should not appear in any admin count
+  // either (lomba card, peserta card, top lomba). Callers that
+  // genuinely need the "all" count should pass an explicit status or
+  // use a new query.
   const row = status
     ? await get<{ c: number }>("SELECT COUNT(*) as c FROM pendaftar WHERE lomba_id = ? AND status = ?", lombaId, status)
-    : await get<{ c: number }>("SELECT COUNT(*) as c FROM pendaftar WHERE lomba_id = ?", lombaId);
+    : await get<{ c: number }>(
+        "SELECT COUNT(*) as c FROM pendaftar WHERE lomba_id = ? AND status != 'ditolak'",
+        lombaId
+      );
   return Number(row?.c ?? 0);
 }
 

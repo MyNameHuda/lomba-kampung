@@ -114,10 +114,14 @@ export async function getLombaById(id: number): Promise<Lomba | null> {
 
 export async function getLombaWithCount(): Promise<{ id: number; nama: string; emoji: string; count: number; pjByKategori: Record<string, Pj[]> }[]> {
   await ensureKualifikasiColumns();
+  // Exclude `ditolak` from the count — declined pendaftar are no longer
+  // in the approval section, so they shouldn't appear in lomba counts
+  // either. Filter at the JOIN so NULL (lomba with zero pendaftar) is
+  // preserved.
   const rows = await all<DbRow>(`
     SELECT l.id, l.nama, l.emoji, COUNT(p.id) as count
     FROM lomba l
-    LEFT JOIN pendaftar p ON p.lomba_id = l.id
+    LEFT JOIN pendaftar p ON p.lomba_id = l.id AND p.status != 'ditolak'
     GROUP BY l.id
     ORDER BY l.urutan
   `);
