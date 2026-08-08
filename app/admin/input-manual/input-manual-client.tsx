@@ -21,6 +21,10 @@ type Kat = {
   max: number;
   autoAge: boolean;
   urutan?: number;
+  icon?: string;
+  colorBg?: string;
+  colorText?: string;
+  colorBorder?: string;
 };
 
 // Server-provided rows (already slimmed in page.tsx).
@@ -46,6 +50,37 @@ const displayKatName = (id: string, kats: Kat[]) => {
 
 const SORT_BY_NAME_ASC = (a: { nama: string }, b: { nama: string }) =>
   a.nama.localeCompare(b.nama, "id", { sensitivity: "base" });
+
+// =================== Group styling (v2 picker) ===================
+// Each picker group gets a distinct pastel tint + icon so the kategori
+// separator is visually obvious. Hardcoded here (not from DB) because
+// the DB kategori colors are tuned for tag/badge use, not large
+// surface tints (e.g. k_anak_l has saturated primary red bg which is
+// too loud for a 5-lomba list container).
+type LombaGroup = {
+  key: string;
+  displayName: string;
+  icon: string;
+  bgColor: string;      // pastel bg for group container
+  borderColor: string;  // matching border
+  textColor: string;    // used in header text + icon
+  lomba: Lomba[];
+};
+
+const GROUP_STYLE: Record<string, { icon: string; bgColor: string; borderColor: string; textColor: string }> = {
+  k_balita:        { icon: "fa-baby",          bgColor: "#FDF2F8", borderColor: "#FBCFE8", textColor: "#9D174D" }, // soft pink
+  [ANAK_COLLAPSED_ID]: { icon: "fa-child",     bgColor: "#EFF6FF", borderColor: "#BFDBFE", textColor: "#1E40AF" }, // soft blue
+  k_dewasa_p:      { icon: "fa-person-dress",  bgColor: "#FFFBEB", borderColor: "#FDE68A", textColor: "#92400E" }, // soft amber
+  k_remaja:        { icon: "fa-user",          bgColor: "#F3F4F6", borderColor: "#D1D5DB", textColor: "#374151" }, // soft gray
+  _uncategorized:  { icon: "fa-folder-open",   bgColor: "#F9FAFB", borderColor: "#E5E7EB", textColor: "#6B7280" },
+};
+
+const GROUP_STYLE_FALLBACK = { icon: "fa-folder-open", bgColor: "#F3F4F6", borderColor: "#E5E7EB", textColor: "#6B7280" };
+
+function makeLombaGroup(key: string, displayName: string, kats: Kat[], lomba: Lomba[] = []): LombaGroup {
+  const style = GROUP_STYLE[key] ?? GROUP_STYLE_FALLBACK;
+  return { key, displayName, lomba, ...style };
+}
 
 export default function InputManualClient({
   lombaList,
@@ -198,7 +233,7 @@ export default function InputManualClient({
       ? Array.from({ length: selectedKat.max - selectedKat.min + 1 }, (_, i) => selectedKat.min + i)
       : [];
 
-  // ============ Lomba picker (v3: grouped by kategori, no search) ============
+  // ============ Lomba picker (v4: grouped by kategori, no search) ============
   //
   // - When selectedKategori === "all", show all lomba grouped by their
   //   primary eligible kategori, each section sorted A-Z.
@@ -206,37 +241,39 @@ export default function InputManualClient({
   //   whose kategoriEligible contains that kategori, flat A-Z sorted.
   //
   // k_anak_l + k_anak_p are collapsed into a single "Anak" group for
-  // display (consistent with the form picker behavior).
+  // display (consistent with the form picker behavior). Each group
+  // carries its own pastel tint + icon so the separator is visually
+  // obvious — admin can scan kategori at a glance without reading text.
   const lombaByKategori = useMemo(() => {
     const sorted = [...lombaList].sort(SORT_BY_NAME_ASC);
-    const map = new Map<string, { displayName: string; lomba: Lomba[] }>();
+    const map = new Map<string, LombaGroup>();
     for (const l of sorted) {
       const raw = l.kategoriEligible[0];
       if (!raw) {
         // Lomba with no kategori — bucket into a synthetic "Lainnya" group
         if (!map.has("_uncategorized")) {
-          map.set("_uncategorized", { displayName: "Lainnya", lomba: [] });
+          map.set("_uncategorized", makeLombaGroup("_uncategorized", "Lainnya", kats));
         }
         map.get("_uncategorized")!.lomba.push(l);
         continue;
       }
       const groupKey = displayKatId(raw);
       if (!map.has(groupKey)) {
-        map.set(groupKey, { displayName: displayKatName(groupKey, kats), lomba: [] });
+        map.set(groupKey, makeLombaGroup(groupKey, displayKatName(groupKey, kats), kats));
       }
       map.get(groupKey)!.lomba.push(l);
     }
     // Sort groups: known kategori first by urutan, then by displayName, then "Lainnya" last
     const urutanById = new Map(kats.map((k) => [k.id, k.urutan]));
-    return Array.from(map.entries()).sort(([a, adisp], [b, bdisp]) => {
+    return Array.from(map.entries()).sort(([a], [b]) => {
       if (a === "_uncategorized") return 1;
       if (b === "_uncategorized") return -1;
       // If a or b is the collapsed Anak group, slot it after the canonical k_balita
       const aOrder = a === ANAK_COLLAPSED_ID ? 2 : urutanById.get(a) ?? 99;
       const bOrder = b === ANAK_COLLAPSED_ID ? 2 : urutanById.get(b) ?? 99;
       if (aOrder !== bOrder) return aOrder - bOrder;
-      return adisp.displayName.localeCompare(bdisp.displayName, "id");
-    });
+      return a.localeCompare(b, "id");
+    }).map(([, g]) => g);
   }, [lombaList, kats]);
 
   // Which chip categories are actually present in lombaList?
@@ -252,7 +289,7 @@ export default function InputManualClient({
   }, [lombaList]);
 
   // The final list of lomba shown in the picker (after filter chip).
-  // When "all" → return the grouped structure. When filtered → flat list.
+  // When "all" → return the grouped structure. When filtered → single group.
   const filteredLombaGroups = useMemo(() => {
     if (selectedKategori === "all") return lombaByKategori;
     const sorted = lombaList
@@ -260,10 +297,7 @@ export default function InputManualClient({
         l.kategoriEligible.some((k) => displayKatId(k) === selectedKategori)
       )
       .sort(SORT_BY_NAME_ASC);
-    const name = displayKatName(selectedKategori, kats);
-    return [[selectedKategori, { displayName: name, lomba: sorted }]] as Array<
-      [string, { displayName: string; lomba: Lomba[] }]
-    >;
+    return [makeLombaGroup(selectedKategori, displayKatName(selectedKategori, kats), kats, sorted)];
   }, [lombaByKategori, selectedKategori, lombaList, kats]);
 
   // ============ CRUD handlers ============
@@ -631,7 +665,10 @@ function Chip({
 }
 
 // =====================================================================
-// Lomba picker — grouped by kategori, A-Z sorted
+// Lomba picker (v2) — each kategori group is a distinct colored card
+// with a prominent header band. Lomba buttons sit inside as white tiles
+// against the kategori tint, so the separator between groups is
+// impossible to miss while scanning.
 // =====================================================================
 function LombaPicker({
   groups,
@@ -640,7 +677,7 @@ function LombaPicker({
   allCount,
   currentKategori,
 }: {
-  groups: Array<[string, { displayName: string; lomba: Lomba[] }]>;
+  groups: LombaGroup[];
   selectedId: number | null;
   onSelect: (id: number) => void;
   allCount: number;
@@ -654,51 +691,97 @@ function LombaPicker({
     );
   }
 
+  // When filter narrows to a single group, the group label is already
+  // visible in the active chip at the top — skip the redundant header
+  // band to save vertical space, but keep the colored card so the
+  // picker still feels separated from the form fields above.
+  const showHeader = groups.length > 1 || currentKategori === "all";
+
   return (
     <div className="space-y-2.5">
-      {groups.map(([key, group], idx) => (
-        <div key={key}>
-          {groups.length > 1 && (
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <i className="fas fa-folder-open text-[10px] text-[#9CA3AF]"></i>
-              <span className="text-[10px] font-bold uppercase text-[#6B7280] tracking-wide">
-                {group.displayName}
-              </span>
-              <span className="text-[10px] text-[#9CA3AF]">· {group.lomba.length} lomba</span>
-            </div>
-          )}
-          <div className="space-y-1">
-            {group.lomba.map((l) => {
-              const active = l.id === selectedId;
-              return (
-                <button
-                  key={l.id}
-                  type="button"
-                  onClick={() => onSelect(l.id)}
-                  className={`w-full text-left p-2.5 rounded-lg border-2 transition-all flex items-center gap-2.5 ${
-                    active
-                      ? "border-primary bg-primary/5"
-                      : "border-[#E5E7EB] hover:border-[#D1D5DB] hover:bg-[#F9FAFB]"
-                  }`}
+      {groups.map((group) => {
+        const hasActive = group.lomba.some((l) => l.id === selectedId);
+        return (
+          <div
+            key={group.key}
+            className="rounded-xl border-2 overflow-hidden transition-all"
+            style={{
+              background: group.bgColor,
+              borderColor: hasActive ? "#E11D1D" : group.borderColor,
+              borderWidth: hasActive ? 2 : 1.5,
+            }}
+          >
+            {showHeader && (
+              <div
+                className="px-3 py-2 flex items-center gap-2 border-b"
+                style={{ borderColor: group.borderColor }}
+              >
+                <span
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] flex-shrink-0"
+                  style={{ background: group.textColor, color: "white" }}
+                  aria-hidden="true"
                 >
-                  <span className="text-xl leading-none">{l.emoji}</span>
-                  <span className={`flex-1 text-[13px] truncate ${active ? "font-bold text-primary" : "font-semibold text-[#1F2937]"}`}>
-                    {l.nama}
-                  </span>
-                  {l.status === "selesai" && (
-                    <span className="text-[9px] bg-[#F3F4F6] text-[#6B7280] px-1.5 py-0.5 rounded font-bold uppercase">
-                      Selesai
-                    </span>
-                  )}
-                  {active && <i className="fas fa-circle-check text-primary text-xs"></i>}
-                </button>
-              );
-            })}
+                  <i className={`fas ${group.icon}`}></i>
+                </span>
+                <span
+                  className="text-[11px] font-extrabold uppercase tracking-wider truncate"
+                  style={{ color: group.textColor }}
+                >
+                  {group.displayName}
+                </span>
+                <span
+                  className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1"
+                  style={{ background: "white", color: group.textColor, border: `1px solid ${group.borderColor}` }}
+                >
+                  <i className="fas fa-trophy text-[9px]"></i>
+                  {group.lomba.length} lomba
+                </span>
+              </div>
+            )}
+            <div className="p-1.5 space-y-1">
+              {group.lomba.length === 0 ? (
+                <div className="text-center py-3 text-[11px] text-[#6B7280]">
+                  Tidak ada lomba.
+                </div>
+              ) : (
+                group.lomba.map((l) => {
+                  const active = l.id === selectedId;
+                  return (
+                    <button
+                      key={l.id}
+                      type="button"
+                      onClick={() => onSelect(l.id)}
+                      className={`w-full text-left p-2 rounded-lg border transition-all flex items-center gap-2.5 ${
+                        active
+                          ? "border-primary bg-white shadow-sm"
+                          : "border-transparent bg-white/60 hover:bg-white hover:border-white"
+                      }`}
+                    >
+                      <span className="text-xl leading-none flex-shrink-0">{l.emoji}</span>
+                      <span
+                        className={`flex-1 text-[13px] truncate ${
+                          active ? "font-bold text-primary" : "font-semibold text-[#1F2937]"
+                        }`}
+                      >
+                        {l.nama}
+                      </span>
+                      {l.status === "selesai" && (
+                        <span className="text-[9px] bg-[#F3F4F6] text-[#6B7280] px-1.5 py-0.5 rounded font-bold uppercase flex-shrink-0">
+                          Selesai
+                        </span>
+                      )}
+                      {active && (
+                        <i className="fas fa-circle-check text-primary text-xs flex-shrink-0"></i>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </div>
-          {idx < groups.length - 1 && <div className="h-0.5" />}
-        </div>
-      ))}
-      {currentKategori !== "all" && groups.length === 0 && (
+        );
+      })}
+      {currentKategori !== "all" && groups.every((g) => g.lomba.length === 0) && (
         <div className="text-center py-4 text-[#6B7280] text-sm">
           Tidak ada lomba untuk kategori ini.
         </div>
