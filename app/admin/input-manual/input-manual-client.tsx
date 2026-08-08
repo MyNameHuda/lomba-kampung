@@ -21,6 +21,13 @@ type Kat = {
 };
 type Recent = { id: number; nama: string; lombaEmoji: string; lombaNama: string; status: string; createdAt: string };
 
+// v2: collapse k_anak_l + k_anak_p into a single "Anak" picker option
+// when both are eligible, matching the public daftar-form pattern. The
+// "Laki-laki" / "Perempuan" button below (Jenis Kelamin) determines
+// which sub-kategori is saved. Admin already knows the gender of the
+// warga they're inputting, so no need to ask twice.
+const VIRTUAL_ANAK_ID = "_anak_virtual";
+
 export default function InputManualClient({ lombaList, kats, recent }: { lombaList: Lomba[]; kats: Kat[]; recent: Recent[] }) {
   const router = useRouter();
   const notify = useNotify();
@@ -31,13 +38,33 @@ export default function InputManualClient({ lombaList, kats, recent }: { lombaLi
   const [umur, setUmur] = useState<number | null>(null);
   const [hadir, setHadir] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // v2: search filter for lomba dropdown (21 lomba in prod is too long
+  // to scroll through). Keeps the current select element; just narrows
+  // the options shown.
+  const [lombaSearch, setLombaSearch] = useState("");
 
   // Derive selected lomba + eligible kats from the master list
   const selectedLomba = useMemo(() => lombaList.find((l) => l.id === lombaId) || null, [lombaId, lombaList]);
+
+  // Collapse k_anak_l + k_anak_p into a single virtual option when both
+  // are eligible. The virtual id "_anak_virtual" gets mapped to the
+  // real k_anak_l / k_anak_p at submit time based on jenisKelamin.
   const eligibleKats = useMemo(() => {
     if (!selectedLomba) return [];
     const set = new Set(selectedLomba.kategoriEligible);
-    return kats.filter((k) => set.has(k.id));
+    const baseKats = kats.filter((k) => set.has(k.id));
+    const hasL = baseKats.some((k) => k.id === "k_anak_l");
+    const hasP = baseKats.some((k) => k.id === "k_anak_p");
+    if (hasL && hasP) {
+      // Replace k_anak_l + k_anak_p with a single virtual "Anak" option.
+      // Reuse k_anak_l's metadata (min/max/autoAge) — both share same.
+      const sample = baseKats.find((k) => k.id === "k_anak_l")!;
+      return [
+        ...baseKats.filter((k) => k.id !== "k_anak_l" && k.id !== "k_anak_p"),
+        { ...sample, id: VIRTUAL_ANAK_ID, nama: "Anak" },
+      ];
+    }
+    return baseKats;
   }, [selectedLomba, kats]);
 
   const selectedKat = useMemo(() => eligibleKats.find((k) => k.id === kategoriId) || null, [eligibleKats, kategoriId]);
@@ -59,6 +86,7 @@ export default function InputManualClient({ lombaList, kats, recent }: { lombaLi
 
   function changeLombaId(newId: number) {
     setLombaId(newId);
+    setLombaSearch(""); // clear search when changing lomba
     const l = lombaList.find((x) => x.id === newId);
     if (!l) {
       setKategoriId("");
@@ -66,7 +94,16 @@ export default function InputManualClient({ lombaList, kats, recent }: { lombaLi
       return;
     }
     const set = new Set(l.kategoriEligible);
-    const first = kats.find((k) => set.has(k.id));
+    const baseKats = kats.filter((k) => set.has(k.id));
+    const hasL = baseKats.some((k) => k.id === "k_anak_l");
+    const hasP = baseKats.some((k) => k.id === "k_anak_p");
+    let first: Kat | undefined;
+    if (hasL && hasP) {
+      const sample = baseKats.find((k) => k.id === "k_anak_l")!;
+      first = { ...sample, id: VIRTUAL_ANAK_ID, nama: "Anak" };
+    } else {
+      first = baseKats[0];
+    }
     if (first) {
       setKategoriId(first.id);
       setUmur(first.autoAge ? first.min : null);
@@ -91,13 +128,19 @@ export default function InputManualClient({ lombaList, kats, recent }: { lombaLi
     }
     setSubmitting(true);
     try {
+      // Resolve virtual "_anak_virtual" → real k_anak_l / k_anak_p
+      // based on the selected jenis_kelamin. Other ids pass through.
+      const realKategoriId =
+        kategoriId === VIRTUAL_ANAK_ID
+          ? jenisKelamin === "L" ? "k_anak_l" : "k_anak_p"
+          : kategoriId;
       const res = await fetch("/api/admin/pendaftar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nama: nama.trim(),
           jenisKelamin,
-          kategoriId,
+          kategoriId: realKategoriId,
           umur: umur ?? selectedKat?.min ?? 0,
           lombaId,
           hadir,
@@ -122,6 +165,15 @@ export default function InputManualClient({ lombaList, kats, recent }: { lombaLi
     ? Array.from({ length: selectedKat.max - selectedKat.min + 1 }, (_, i) => selectedKat.min + i)
     : [];
 
+  // v2: filter lomba list by search query (case-insensitive, matches nama).
+  // When search is empty, show all lomba. Sorted by urutan (already
+  // sorted from server).
+  const filteredLombaList = useMemo(() => {
+    const q = lombaSearch.trim().toLowerCase();
+    if (!q) return lombaList;
+    return lombaList.filter((l) => l.nama.toLowerCase().includes(q));
+  }, [lombaList, lombaSearch]);
+
   return (
     <>
       <div className="bg-[#FCE0E0] border border-[#FBE0E0] border-l-4 border-l-[#E11D1D] rounded p-3.5 mb-5 flex gap-3 items-start">
@@ -144,15 +196,48 @@ export default function InputManualClient({ lombaList, kats, recent }: { lombaLi
         <form onSubmit={submit} className="space-y-4">
           <div>
             <label className="label">Pilih Lomba <span className="text-primary">*</span></label>
+            {/* v2: search bar above the dropdown. With 21+ lomba in prod
+                the native <select> is hard to scroll through. Type-ahead
+                filter narrows the options. */}
+            <div className="relative mb-2">
+              <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF] text-sm pointer-events-none"></i>
+              <input
+                type="text"
+                value={lombaSearch}
+                onChange={(e) => setLombaSearch(e.target.value)}
+                placeholder="Cari nama lomba..."
+                className="w-full pl-10 pr-10 py-2 border border-[#E5E7EB] rounded-lg text-sm bg-white focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary-light transition-colors"
+              />
+              {lombaSearch && (
+                <button
+                  type="button"
+                  onClick={() => setLombaSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-[#9CA3AF] hover:bg-[#F3F4F6] hover:text-[#6B7280] flex items-center justify-center"
+                  aria-label="Bersihkan pencarian"
+                >
+                  <i className="fas fa-xmark text-[12px]"></i>
+                </button>
+              )}
+            </div>
             <select
               value={lombaId ?? ""}
               onChange={(e) => changeLombaId(Number(e.target.value))}
               className="input"
+              size={Math.min(8, Math.max(3, filteredLombaList.length))}
             >
-              {lombaList.map((l) => (
-                <option key={l.id} value={l.id}>{l.emoji} {l.nama}</option>
-              ))}
+              {filteredLombaList.length === 0 ? (
+                <option disabled value="">Tidak ada lomba yang cocok</option>
+              ) : (
+                filteredLombaList.map((l) => (
+                  <option key={l.id} value={l.id}>{l.emoji} {l.nama}</option>
+                ))
+              )}
             </select>
+            {lombaSearch && (
+              <div className="text-[11px] text-[#6B7280] mt-1.5">
+                {filteredLombaList.length} dari {lombaList.length} lomba cocok dengan "{lombaSearch}"
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
