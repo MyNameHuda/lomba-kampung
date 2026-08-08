@@ -35,6 +35,10 @@ const lombaSchema = z.object({
   // Admin can toggle off to close registration while keeping lomba visible.
   // Admin input-manual always works regardless of this flag.
   pendaftaranDibuka: z.boolean().default(true),
+  // 3-fase flow opt-in (added 2026-08-09). When true, this lomba has the
+  // Kualifikasi → Semi Final → Final progression instead of the default
+  // single-fase (just pick Juara 1/2/3). Default false.
+  faseEnabled: z.boolean().default(false),
   urutan: z.number().int().min(0).default(0),
   // v4: finalisCount removed — admin decides finalists per-pendaftar (Loloskan/Gugur).
   // Kept as optional for back-compat with existing payloads, but ignored.
@@ -101,6 +105,7 @@ export async function POST(req: Request) {
       finalisCount: 5,
       phase: null,
       pendaftaranDibuka: data.pendaftaranDibuka,
+      faseEnabled: data.faseEnabled,
     });
     await setLombaKategori(id, data.pjList.map((p) => ({
       kategoriId: p.kategoriId,

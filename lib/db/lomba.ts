@@ -9,6 +9,7 @@ import {
   ensureKualifikasiV4Columns,
   ensureLombaJadwalTable,
   ensurePendaftaranDibukaColumn,
+  ensureTigaFaseColumns,
 } from "./migrations";
 import type { Lomba, LombaKategoriInput, Pj } from "./types";
 
@@ -95,7 +96,7 @@ function attachJadwal<T extends { id: number }>(
 
 // =================== Read ===================
 export async function getLomba(includeInactive = false): Promise<Lomba[]> {
-  await Promise.all([ensureKualifikasiColumns(), ensurePendaftaranDibukaColumn()]);
+  await Promise.all([ensureKualifikasiColumns(), ensurePendaftaranDibukaColumn(), ensureTigaFaseColumns()]);
   const sql = includeInactive
     ? "SELECT * FROM lomba ORDER BY urutan"
     : "SELECT * FROM lomba WHERE status = 'aktif' ORDER BY urutan";
@@ -105,7 +106,7 @@ export async function getLomba(includeInactive = false): Promise<Lomba[]> {
 }
 
 export async function getLombaById(id: number): Promise<Lomba | null> {
-  await Promise.all([ensureKualifikasiColumns(), ensurePendaftaranDibukaColumn()]);
+  await Promise.all([ensureKualifikasiColumns(), ensurePendaftaranDibukaColumn(), ensureTigaFaseColumns()]);
   const row = toCamel<Lomba>(await get<DbRow>("SELECT * FROM lomba WHERE id = ?", id));
   if (!row) return null;
   const [pjBulk, tutupBulk, jadwalBulk] = await Promise.all([loadPjBulk(), loadKategoriTutupBulk(), loadJadwalBulk()]);
@@ -140,10 +141,10 @@ export async function getLombaWithCount(): Promise<{ id: number; nama: string; e
 // jadwalByKategori — the last three are auto-derived via loadPjBulk / loadKategoriTutupBulk
 // / loadJadwalBulk on read).
 export async function createLomba(data: Omit<Lomba, "id" | "createdAt" | "pjByKategori" | "kategoriTutupAt" | "jadwalByKategori">): Promise<number> {
-  await Promise.all([ensureKualifikasiColumns(), ensurePendaftaranDibukaColumn()]);
+  await Promise.all([ensureKualifikasiColumns(), ensurePendaftaranDibukaColumn(), ensureTigaFaseColumns()]);
   const result = await run(
-    `INSERT INTO lomba (nama, emoji, deskripsi, syarat, kategori_eligible, status, urutan, finalis_count, phase, pendaftaran_dibuka)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO lomba (nama, emoji, deskripsi, syarat, kategori_eligible, status, urutan, finalis_count, phase, pendaftaran_dibuka, fase_enabled)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     data.nama,
     data.emoji,
     data.deskripsi,
@@ -153,7 +154,8 @@ export async function createLomba(data: Omit<Lomba, "id" | "createdAt" | "pjByKa
     data.urutan,
     data.finalisCount,
     data.phase,
-    data.pendaftaranDibuka ? 1 : 0
+    data.pendaftaranDibuka ? 1 : 0,
+    data.faseEnabled ? 1 : 0
   );
   return Number(result.lastInsertRowid);
 }
@@ -194,6 +196,7 @@ export async function updateLomba(id: number, updates: Partial<Omit<Lomba, "id" 
     urutan: "urutan",
     finalisCount: "finalis_count",
     pendaftaranDibuka: "pendaftaran_dibuka",
+    faseEnabled: "fase_enabled",
   };
   const sets: string[] = [];
   const vals: (string | number | null)[] = [];
@@ -201,6 +204,7 @@ export async function updateLomba(id: number, updates: Partial<Omit<Lomba, "id" 
     if (k === "syarat") { sets.push("syarat = ?"); vals.push(JSON.stringify(v)); }
     else if (k === "kategoriEligible") { sets.push("kategori_eligible = ?"); vals.push(JSON.stringify(v)); }
     else if (k === "pendaftaranDibuka") { sets.push("pendaftaran_dibuka = ?"); vals.push(v ? 1 : 0); }
+    else if (k === "faseEnabled") { sets.push("fase_enabled = ?"); vals.push(v ? 1 : 0); }
     else if (map[k]) { sets.push(`${map[k]} = ?`); vals.push(v as string | number | null); }
   }
   if (sets.length > 0) {

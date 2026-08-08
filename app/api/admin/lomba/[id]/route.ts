@@ -28,6 +28,10 @@ const lombaSchema = z.object({
   status: z.enum(["draft", "aktif", "selesai"]).optional(),
   // Toggle public registration open/closed. Admin input-manual always works.
   pendaftaranDibuka: z.boolean().optional(),
+  // 3-fase flow opt-in (added 2026-08-09). When true, this lomba uses
+  // Kualifikasi → Semi Final → Final progression instead of the default
+  // single-fase (just pick Juara 1/2/3). Default false.
+  faseEnabled: z.boolean().optional(),
   urutan: z.number().int().min(0).optional(),
   // v4: finalisCount removed from active use. Kept optional for back-compat
   // with old payloads (silently ignored).

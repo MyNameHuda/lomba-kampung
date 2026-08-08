@@ -30,6 +30,10 @@ export type LombaSlim = {
   // Whether public registration is open. Always present from server.
   // Admin can toggle off; admin input-manual always works regardless.
   pendaftaranDibuka?: boolean;
+  // 3-fase flow opt-in (added 2026-08-09). When true, lomba has
+  // Kualifikasi → Semi Final → Final progression. Default false.
+  // Used by lomba card + public detail to show phase badges.
+  faseEnabled?: boolean;
   // Per-kategori execution date (jadwal). Server-side loaded from
   // `lomba_jadwal` table via loadJadwalBulk. Absent key = no jadwal set.
   jadwalByKategori?: Record<string, {

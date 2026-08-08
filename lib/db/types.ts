@@ -46,6 +46,12 @@ export type Lomba = {
   // kualifikasi phase). Default true on new lomba. Admin input-manual always works
   // regardless of this flag.
   pendaftaranDibuka: boolean;
+  // 3-fase flow opt-in (added 2026-08-09). 0 = legacy single-fase (just pick
+  // Juara 1/2/3), 1 = 3-fase progression: Kualifikasi → Semi Final → Final.
+  // Kualifikasi uses `pendaftar.is_finalist`, Semi Final uses
+  // `pendaftar.is_semi_finalist`, Final reuses `pendaftar.juara_rank`.
+  // Default 0 so existing lomba behavior is unchanged.
+  faseEnabled: boolean;
   // Stage system v3 — kualifikasi phase config (DEPRECATED in v4).
   // Kept for backward compat with existing 6 lomba. Not used in v4 logic
   // (finalis count is now decided per-pendaftar via is_finalist).
@@ -110,6 +116,13 @@ export type Pendaftar = {
   // - juaraRank: Juara 1/2/3 within (lomba, kategori), set in final phase only.
   //   At most 1 Juara per rank per (lomba, kategori). NULL = not picked yet.
   isFinalist: 0 | 1 | null;
+  // Stage system 3-fase (added 2026-08-09, opt-in via lomba.faseEnabled).
+  // Semi-final state for 3-fase lomba. NULL = not advanced yet (or
+  // lomba doesn't use 3-fase flow).
+  //   1 = lolos (advance to final, eligible for Juara 1/2/3)
+  //   0 = gugur (eliminated, cannot become Juara)
+  //   null = belum diproses / tidak applicable
+  isSemiFinalist: 0 | 1 | null;
   juaraRank: 1 | 2 | 3 | null;
   createdAt: number;
   updatedAt: number;

@@ -30,6 +30,12 @@ export type LombaFormData = {
   // Admin can close this while keeping lomba visible (e.g. for kualifikasi
   // phase). Admin input-manual always works regardless.
   pendaftaranDibuka: boolean;
+  // 3-fase flow opt-in (added 2026-08-09). When true, the lomba progresses
+  // through Kualifikasi → Semi Final → Final instead of the default
+  // single-fase (just pick Juara 1/2/3). Kualifikasi uses
+  // pendaftar.is_finalist, Semi Final uses pendaftar.is_semi_finalist,
+  // Final reuses pendaftar.juara_rank. Default false.
+  faseEnabled: boolean;
   // Per-kategori jadwal (loaded from editing.jadwalByKategori, sent back as
   // jadwalList on save). Server-side this lives in `lomba_jadwal` table.
   jadwalByKategori?: Record<string, JadwalInput>;
@@ -47,6 +53,7 @@ const EMPTY_LOMBA: Omit<LombaFormData, "id"> = {
   urutan: 0,
   finalisCount: 5,
   pendaftaranDibuka: true,
+  faseEnabled: false,
 };
 
 const MAX_PJ_PER_KAT = APP_CONFIG.MAX_PJ_PER_KAT;
@@ -89,6 +96,9 @@ export default function LombaModal({
   const [urutan, setUrutan] = useState(editing?.urutan ?? nextUrutan);
   const [finalisCount, setFinalisCount] = useState<number>(editing?.finalisCount ?? 5);
   const [pendaftaranDibuka, setPendaftaranDibuka] = useState<boolean>(editing?.pendaftaranDibuka ?? true);
+  // 3-fase flow toggle. When true, admin manages Kualifikasi → Semi Final →
+  // Final progression instead of just picking Juara 1/2/3 directly.
+  const [faseEnabled, setFaseEnabled] = useState<boolean>(editing?.faseEnabled ?? false);
   // Per-kategori jadwal (tanggal + jam). Empty Record = no jadwal set.
   const [jadwalByKategori, setJadwalByKategori] = useState<Record<string, JadwalInput>>(() => {
     if (!editing?.jadwalByKategori) return {};
@@ -274,6 +284,7 @@ export default function LombaModal({
         urutan,
         finalisCount,
         pendaftaranDibuka,
+        faseEnabled,
       });
     } finally {
       setSaving(false);
@@ -485,6 +496,50 @@ export default function LombaModal({
             >
               <span
                 className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${pendaftaranDibuka ? "translate-x-6" : "translate-x-0"}`}
+              />
+            </button>
+          </div>
+
+          {/* 3-Fase flow toggle (Kualifikasi → Semi Final → Final) */}
+          <div className="flex items-center justify-between gap-4 p-3.5 border border-[#E5E7EB] rounded-lg bg-gradient-to-r from-[#FDF2F8] to-[#EFF6FF]">
+            <div>
+              <div className="text-[13px] font-semibold flex items-center gap-2">
+                <i className={`fas ${faseEnabled ? "fa-sitemap text-[#9333EA]" : "fa-stream text-[#9CA3AF]"}`}></i>
+                3 Fase (Kualifikasi → Semi Final → Final)
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${faseEnabled ? "bg-[#F3E8FF] text-[#7C3AED]" : "bg-[#F3F4F6] text-[#6B7280]"}`}>
+                  {faseEnabled ? "AKTIF" : "MATI"}
+                </span>
+              </div>
+              <div className="text-[11px] text-[#6B7280] mt-1">
+                {faseEnabled
+                  ? "Lomba punya 3 tahap: admin pilih Lolos/Gugur di Kualifikasi, lalu Semi Final, terakhir Juara 1/2/3."
+                  : "Mode standar: langsung pilih Juara 1/2/3 dari peserta yang disetujui."}
+              </div>
+              {faseEnabled && (
+                <div className="flex items-center gap-1.5 mt-2 text-[10px] font-semibold">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#DBEAFE] text-[#1E40AF]">
+                    <i className="fas fa-flag text-[9px]"></i> 1. Kualifikasi
+                  </span>
+                  <i className="fas fa-chevron-right text-[#9CA3AF] text-[8px]"></i>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FEF3C7] text-[#92400E]">
+                    <i className="fas fa-trophy text-[9px]"></i> 2. Semi Final
+                  </span>
+                  <i className="fas fa-chevron-right text-[#9CA3AF] text-[8px]"></i>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#F3E8FF] text-[#7C3AED]">
+                    <i className="fas fa-crown text-[9px]"></i> 3. Final (Juara)
+                  </span>
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setFaseEnabled((v) => !v)}
+              className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${faseEnabled ? "bg-[#9333EA]" : "bg-[#D1D5DB]"}`}
+              title={faseEnabled ? "Matikan 3 fase" : "Aktifkan 3 fase"}
+              aria-pressed={faseEnabled}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${faseEnabled ? "translate-x-6" : "translate-x-0"}`}
               />
             </button>
           </div>

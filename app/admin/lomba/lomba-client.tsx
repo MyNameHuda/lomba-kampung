@@ -123,6 +123,7 @@ export default function LombaClient({
           urutan: data.urutan,
           finalisCount: data.finalisCount,
           pendaftaranDibuka: data.pendaftaranDibuka,
+          faseEnabled: data.faseEnabled,
           pjByKategori: pjMap,
           jadwalByKategori: {},
         };
@@ -335,6 +336,15 @@ export default function LombaClient({
                     >
                       <i className="fas fa-circle" style={{ fontSize: 6 }}></i> {l.status}
                     </button>
+                    {/* v8: 3-fase flow badge (Kualifikasi → Semi Final → Final) */}
+                    {l.faseEnabled && (
+                      <span
+                        className="ml-1 mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide bg-gradient-to-r from-[#DBEAFE] via-[#FEF3C7] to-[#F3E8FF] text-[#581C87] border border-[#9333EA]/30"
+                        title="Lomba ini punya 3 fase: Kualifikasi → Semi Final → Final"
+                      >
+                        <i className="fas fa-sitemap"></i> 3 Fase
+                      </span>
+                    )}
                   </div>
                 </div>
 

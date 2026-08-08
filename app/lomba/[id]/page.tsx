@@ -160,6 +160,16 @@ export default async function LombaDetail({ params }: { params: Promise<{ id: st
                   page collapses to a single "Anak" via publicKategoriName. */}
               {l.kategoriEligible.map((k) => katMap.get(k)?.nama).filter(Boolean).join(" · ")}
             </span>
+            {/* v8: 3-fase badge (Kualifikasi → Semi Final → Final). Shown to
+                warga so they know this lomba has a multi-stage progression
+                and the current "stage" they're seeing is part of a larger
+                tournament flow. */}
+            {l.faseEnabled && (
+              <span className="inline-flex items-center gap-1.5 bg-gradient-to-r from-[#1E40AF] via-[#92400E] to-[#7C3AED] px-3 py-1 rounded-full text-[11px] font-extrabold text-white shadow">
+                <i className="fas fa-sitemap"></i>
+                3 Fase: Kualifikasi → Semi Final → Final
+              </span>
+            )}
             <PublicStatusBadge status={publicStatus} />
           </div>
         </div>

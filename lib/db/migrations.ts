@@ -17,6 +17,22 @@ export async function ensureJuaraColumn(): Promise<void> {
   await ensureColumn("pendaftar", "juara_rank", "INTEGER");
 }
 
+// Self-healing: ensure schema supports the 3-fase flow (Kualifikasi → Semi
+// Final → Final). Per-lomba opt-in via `lomba.fase_enabled` (default 0 =
+// legacy single-fase: just pick Juara 1/2/3 from the approved peserta).
+// When enabled, the lomba progresses through:
+//   1. Kualifikasi — uses existing `pendaftar.is_finalist`
+//      (1 = lolos, 0 = gugur, null = pending)
+//   2. Semi Final — uses new `pendaftar.is_semi_finalist`
+//      (1 = lolos, 0 = gugur, null = pending / not advanced yet)
+//   3. Final — reuses existing `pendaftar.juara_rank` (1/2/3 = Juara)
+export async function ensureTigaFaseColumns(): Promise<void> {
+  // 0 = legacy single-fase (default), 1 = 3-fase flow enabled
+  await ensureColumn("lomba", "fase_enabled", "INTEGER NOT NULL DEFAULT 0");
+  // Tri-state: 1 = lolos, 0 = gugur, null = belum diproses
+  await ensureColumn("pendaftar", "is_semi_finalist", "INTEGER");
+}
+
 // Self-healing: ensure lomba has kualifikasi phase columns (v3 stage system).
 // - finalis_count: how many finalists per kategori (default 5, range 1-50) — DEPRECATED in v4
 // - phase: 'kualifikasi' | 'final' | NULL

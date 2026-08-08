@@ -32,12 +32,13 @@ export async function getPendaftarById(id: number): Promise<Pendaftar | null> {
 
 // =================== Write ===================
 export async function createPendaftar(
-  data: Omit<Pendaftar, "id" | "nomor" | "createdAt" | "updatedAt" | "status" | "alasanTolak" | "hadir" | "juaraRank" | "isFinalist"> & {
+  data: Omit<Pendaftar, "id" | "nomor" | "createdAt" | "updatedAt" | "status" | "alasanTolak" | "hadir" | "juaraRank" | "isFinalist" | "isSemiFinalist"> & {
     status?: PendaftarStatus;
     alasanTolak?: string | null;
     hadir?: boolean;
     juaraRank?: 1 | 2 | 3 | null;
     isFinalist?: 0 | 1 | null;
+    isSemiFinalist?: 0 | 1 | null;
   }
 ): Promise<{ id: number; nomor: string }> {
   const year = new Date().getFullYear();
@@ -88,6 +89,7 @@ export async function updatePendaftar(id: number, updates: Partial<Pendaftar>): 
     hadir: "hadir",
     juaraRank: "juara_rank",
     isFinalist: "is_finalist",
+    isSemiFinalist: "is_semi_finalist",
     createdAt: "created_at",
     updatedAt: "updated_at",
   };
