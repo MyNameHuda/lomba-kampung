@@ -113,6 +113,74 @@ export async function deletePendaftar(id: number): Promise<void> {
 }
 
 /**
+ * Bulk copy pendaftar from a source lomba into a target lomba.
+ *
+ * Behavior:
+ * - Only copies pendaftar with status='disetujui' (ditolak skipped)
+ * - Skips pendaftar whose nama already exists in target (case-insensitive
+ *   + trim dedup). If a nama exists with multiple words, treated as
+ *   identical regardless of case/whitespace at the edges.
+ * - Skips pendaftar whose kategoriId is NOT eligible in the target
+ *   lomba (mismatch — keeps target's kategori integrity).
+ * - Copied rows are marked sumber='manual' (admin-initiated) and
+ *   hadir=true (consistent with the input-manual form default).
+ * - Each insert is sequential to avoid the MAX(nomor) race that would
+ *   happen with parallel calls. Per-row overhead is fine for batches
+ *   of <100.
+ *
+ * Returns counts: { copied, skippedDuplicate, skippedKategori }.
+ */
+export async function bulkCopyPendaftar(
+  sourceLombaId: number,
+  targetLombaId: number,
+  targetEligibleKategori: string[]
+): Promise<{ copied: number; skippedDuplicate: number; skippedKategori: number; copiedIds: number[] }> {
+  // 1) Load source pendaftar (only disetujui — ditolak not actionable)
+  const sourceRows = await getPendaftarByLomba(sourceLombaId, "disetujui");
+  if (sourceRows.length === 0) {
+    return { copied: 0, skippedDuplicate: 0, skippedKategori: 0, copiedIds: [] };
+  }
+
+  // 2) Build target's existing-nama set for dedup
+  const targetRows = await getPendaftarByLomba(targetLombaId);
+  const eligibleSet = new Set(targetEligibleKategori);
+  const normalize = (s: string) => s.trim().toLowerCase();
+  const existingNames = new Set(targetRows.map((p) => normalize(p.nama)));
+
+  // 3) Sequential insert (avoid MAX(nomor) race in createPendaftar)
+  let copied = 0;
+  let skippedDuplicate = 0;
+  let skippedKategori = 0;
+  const copiedIds: number[] = [];
+  for (const src of sourceRows) {
+    if (!eligibleSet.has(src.kategoriId)) {
+      skippedKategori++;
+      continue;
+    }
+    if (existingNames.has(normalize(src.nama))) {
+      skippedDuplicate++;
+      continue;
+    }
+    const result = await createPendaftar({
+      nama: src.nama,
+      noWa: src.noWa,
+      jenisKelamin: src.jenisKelamin,
+      kategoriId: src.kategoriId,
+      umur: src.umur,
+      lombaId: targetLombaId,
+      sumber: "manual", // admin-initiated copy
+      hadir: true, // consistent with input-manual default
+    });
+    copiedIds.push(result.id);
+    copied++;
+    // Add to existingNames so a source lomba with duplicate nama rows
+    // (shouldn't happen but defensive) doesn't double-insert in target.
+    existingNames.add(normalize(src.nama));
+  }
+  return { copied, skippedDuplicate, skippedKategori, copiedIds };
+}
+
+/**
  * Bulk delete pendaftar rows.
  *  - scope: "pending" → only rows still awaiting approval (status='pending')
  *  - scope: "all"     → every row in the table

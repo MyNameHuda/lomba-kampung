@@ -82,14 +82,27 @@ function makeLombaGroup(key: string, displayName: string, kats: Kat[], lomba: Lo
   return { key, displayName, lomba, ...style };
 }
 
+// Server-side "eligible source" row — used by the Salin dari Lomba
+// Lain card on the right side. Pre-built on the server to avoid
+// re-deriving kategori overlap on every client render.
+type SourceLomba = {
+  id: number;
+  nama: string;
+  emoji: string;
+  count: number;
+  sharedKategori: string[];
+};
+
 export default function InputManualClient({
   lombaList,
   kats,
   pesertaByLomba,
+  sourceByLomba,
 }: {
   lombaList: Lomba[];
   kats: Kat[];
   pesertaByLomba: Record<number, PesertaRow[]>;
+  sourceByLomba: Record<number, SourceLomba[]>;
 }) {
   const router = useRouter();
   const notify = useNotify();
@@ -126,6 +139,13 @@ export default function InputManualClient({
   // after edit/delete without a full router.refresh.
   const [pesertaList, setPesertaList] = useState<PesertaRow[]>([]);
   const [editingPeserta, setEditingPeserta] = useState<PesertaRow | null>(null);
+
+  // v4: copy-from-other-lomba state. `copySource` is the source lomba
+  // the admin picked from the picker (null = no modal open). The
+  // confirm modal opens as soon as a source is picked; closing it
+  // resets the state.
+  const [copySource, setCopySource] = useState<SourceLomba | null>(null);
+  const [copying, setCopying] = useState(false);
 
   // Derive selected lomba + eligible kats from the master list
   const selectedLomba = useMemo(
@@ -353,6 +373,39 @@ export default function InputManualClient({
     setTimeout(() => router.refresh(), 500);
   }
 
+  // v4: copy peserta from another lomba (in same kategori) into the
+  // current selected lomba. Server dedups by nama (case-insensitive +
+  // trim) and skips pendaftar whose kategoriId is not eligible in
+  // the target. UI gets a single summary toast on completion.
+  async function runCopy() {
+    if (!copySource || !selectedLomba) return;
+    setCopying(true);
+    try {
+      const res = await fetch(`/api/admin/lomba/${selectedLomba.id}/copy-from`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceLombaId: copySource.id }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || "Gagal");
+      const parts: string[] = [];
+      if (j.copied > 0) parts.push(`✅ ${j.copied} peserta disalin`);
+      if (j.skippedDuplicate > 0) parts.push(`⏭️ ${j.skippedDuplicate} duplikat dilewati`);
+      if (j.skippedKategori > 0) parts.push(`🚫 ${j.skippedKategori} kategori tidak cocok`);
+      if (parts.length === 0) parts.push("Tidak ada yang disalin (semua peserta sudah ada)");
+      notify.success(parts.join(" · "));
+      setCopySource(null);
+      // Refresh server data so the new peserta show up. The page
+      // re-renders with the new pesertaByLomba; the useEffect syncs
+      // pesertaList from there.
+      router.refresh();
+    } catch (e) {
+      notify.error(e instanceof Error ? e.message : "Gagal menyalin");
+    } finally {
+      setCopying(false);
+    }
+  }
+
   const totalPesertaForLomba = selectedLomba ? pesertaList.length : 0;
 
   return (
@@ -565,6 +618,16 @@ export default function InputManualClient({
             </div>
           )}
 
+          {/* ============ Copy from other lomba ============ */}
+          {selectedLomba && (sourceByLomba[selectedLomba.id] || []).length > 0 && (
+            <CopyFromLombaCard
+              sources={sourceByLomba[selectedLomba.id] || []}
+              targetLomba={selectedLomba}
+              kats={kats}
+              onPickSource={(src) => setCopySource(src)}
+            />
+          )}
+
           {/* CRUD list (replaces "Input Manual Terbaru") */}
           {selectedLomba && (
             <div className="card overflow-hidden">
@@ -611,6 +674,19 @@ export default function InputManualClient({
           })}
           onClose={() => setEditingPeserta(null)}
           onSaved={applyEdit}
+        />
+      )}
+
+      {/* v4: Copy-from-other-lomba confirm modal */}
+      {copySource && selectedLomba && (
+        <CopyConfirmModal
+          source={copySource}
+          target={selectedLomba}
+          targetExistingNames={new Set(pesertaList.map((p) => p.nama.trim().toLowerCase()))}
+          kats={kats}
+          copying={copying}
+          onClose={() => !copying && setCopySource(null)}
+          onConfirm={runCopy}
         />
       )}
     </>
@@ -831,6 +907,195 @@ function LombaPicker({
           Tidak ada lomba untuk kategori ini.
         </div>
       )}
+    </div>
+  );
+}
+
+// =====================================================================
+// Copy-from-other-lomba card (v4)
+// =====================================================================
+// Shows a list of other lomba in the SAME kategori (with at least 1
+// active peserta). Clicking a row opens the CopyConfirmModal. If no
+// eligible sources exist for the current target lomba, the parent
+// doesn't render this card at all.
+// =====================================================================
+function CopyFromLombaCard({
+  sources,
+  targetLomba,
+  kats,
+  onPickSource,
+}: {
+  sources: SourceLomba[];
+  targetLomba: Lomba;
+  kats: Kat[];
+  onPickSource: (src: SourceLomba) => void;
+}) {
+  // Pre-compute display names for the shared kategori badges (so admin
+  // can see why each source is eligible).
+  const katName = (id: string) => {
+    if (id === ANAK_COLLAPSED_ID) return "Anak";
+    return kats.find((k) => k.id === id)?.nama ?? id;
+  };
+  return (
+    <div className="card overflow-hidden">
+      <div className="p-4 border-b border-[#E5E7EB] flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <div className="font-bold text-sm flex items-center gap-2">
+            <i className="fas fa-copy text-primary"></i>
+            Salin Peserta dari Lomba Lain
+          </div>
+          <div className="text-xs text-[#6B7280] mt-0.5">
+            Lomba lain dengan kategori yang sama · duplikat otomatis dilewati
+          </div>
+        </div>
+      </div>
+      <div className="divide-y divide-[#E5E7EB]">
+        {sources.map((src) => (
+          <button
+            key={src.id}
+            type="button"
+            onClick={() => onPickSource(src)}
+            className="w-full p-3 text-left flex items-center gap-3 hover:bg-[#F9FAFB] transition-colors"
+          >
+            <span className="text-2xl leading-none flex-shrink-0">{src.emoji}</span>
+            <div className="flex-1 min-w-0 flex flex-col gap-0.5 leading-snug">
+              <div className="font-semibold text-[13px] truncate">{src.nama}</div>
+              <div className="text-[11px] text-[#6B7280] flex items-center gap-1.5 flex-wrap">
+                <span className="inline-flex items-center gap-1 bg-[#F3F4F6] px-1.5 py-0.5 rounded text-[10px] font-bold text-[#374151]">
+                  <i className="fas fa-users text-[9px]"></i> {src.count} peserta
+                </span>
+                {src.sharedKategori.map((k) => (
+                  <span
+                    key={k}
+                    className="inline-flex items-center gap-1 bg-[#EFF6FF] text-[#1E40AF] px-1.5 py-0.5 rounded text-[10px] font-bold"
+                  >
+                    {katName(k)}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <i className="fas fa-chevron-right text-[#9CA3AF] text-xs flex-shrink-0"></i>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// Copy confirm modal — shows dedup preview, then performs the copy
+// =====================================================================
+function CopyConfirmModal({
+  source,
+  target,
+  targetExistingNames,
+  kats,
+  copying,
+  onClose,
+  onConfirm,
+}: {
+  source: SourceLomba;
+  target: Lomba;
+  targetExistingNames: Set<string>;
+  kats: Kat[];
+  copying: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  // Estimate the dedup outcome client-side for the preview. The server
+  // re-computes the same dedup authoritatively — the counts may
+  // differ if source lomba has kategori not eligible in target (which
+  // the client doesn't know per-pendaftar). That's why we say "±" in
+  // the modal and rely on the server response for the final counts.
+  //
+  // We do know the source count from the picker. The exact
+  // per-pendaftar names are not pre-loaded, so we just show the total
+  // and an optimistic "akan disalin" estimate. Server handles real
+  // dedup.
+  const willCopy = source.count; // optimistic
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl max-w-[440px] w-full overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-5 border-b border-[#E5E7EB] flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-bold flex items-center gap-2">
+              <i className="fas fa-copy text-primary"></i>
+              Salin Peserta
+            </h3>
+            <div className="text-[11px] text-[#6B7280] mt-0.5">
+              Dari <strong>{source.emoji} {source.nama}</strong> ke <strong>{target.emoji} {target.nama}</strong>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            disabled={copying}
+            className="w-8 h-8 rounded-full bg-[#F9FAFB] text-[#6B7280] flex items-center justify-center hover:bg-[#E5E7EB] disabled:opacity-50"
+          >
+            <i className="fas fa-xmark"></i>
+          </button>
+        </div>
+        <div className="p-5 space-y-3">
+          <div className="bg-[#F0F9FF] border border-[#BAE6FD] rounded-lg p-3.5 text-[13px] text-[#075985] flex items-start gap-2.5">
+            <i className="fas fa-circle-info text-[#0284C7] mt-0.5"></i>
+            <div className="leading-relaxed">
+              <strong>{source.count} peserta</strong> akan disalin dari lomba sumber.
+              Peserta dengan nama yang sudah ada di lomba target (tanpa
+              membedakan huruf besar/kecil) akan otomatis dilewati.
+            </div>
+          </div>
+          <div className="space-y-2">
+            <SummaryRow icon="fa-copy" color="#E11D1D" label="Akan disalin" value={`~${willCopy} peserta`} />
+            <SummaryRow icon="fa-user-plus" color="#15803D" label="Status setelah salin" value="Disetujui + Hadir (sumber: manual)" />
+            <SummaryRow icon="fa-shield-halved" color="#1E40AF" label="Duplikat" value="Otomatis dilewati" />
+          </div>
+          <div className="text-[11px] text-[#6B7280] leading-relaxed">
+            <i className="fas fa-lightbulb text-[#EAB308]"></i>{" "}
+            Peserta yang sudah ada di lomba target tidak akan ditimpa
+            atau di-update. Hanya baris baru yang ditambahkan.
+          </div>
+        </div>
+        <div className="p-4 bg-[#F9FAFB] flex gap-2 border-t border-[#E5E7EB]">
+          <button
+            onClick={onClose}
+            disabled={copying}
+            className="btn btn-secondary flex-1 disabled:opacity-50"
+          >
+            Batal
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={copying}
+            className="btn btn-primary flex-1 disabled:opacity-60"
+          >
+            {copying ? (
+              <><i className="fas fa-spinner fa-spin"></i> Menyalin...</>
+            ) : (
+              <><i className="fas fa-copy"></i> Salin Sekarang</>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SummaryRow({ icon, color, label, value }: { icon: string; color: string; label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-2.5 text-[12px]">
+      <span
+        className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] flex-shrink-0"
+        style={{ background: color, color: "white" }}
+      >
+        <i className={`fas ${icon}`}></i>
+      </span>
+      <span className="text-[#6B7280]">{label}:</span>
+      <span className="font-bold text-[#1F2937]">{value}</span>
     </div>
   );
 }

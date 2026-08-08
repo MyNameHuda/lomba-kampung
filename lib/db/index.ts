@@ -60,6 +60,7 @@ export {
   updatePendaftar,
   deletePendaftar,
   bulkDeletePendaftar,
+  bulkCopyPendaftar,
   countLombaAktif,
   countPendaftarByStatus,
   countAllPendaftar,
