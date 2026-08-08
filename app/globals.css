@@ -440,7 +440,6 @@
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px;
   border-bottom: 1px solid #F3F4F6;
-  border-left: 4px solid transparent;
   transition: background 0.15s;
 }
 .juara-card:last-child { border-bottom: none; }
@@ -488,6 +487,70 @@
   display: flex; align-items: center; gap: 10px;
   padding: 16px 14px;
   font-size: 12px; color: #9CA3AF;
+}
+
+/* =================== Juara group boxes (Lolos / Gugur) =================== */
+/* v2: split pendaftar list into clearly separated groups so admin can
+   see at a glance who's in the final vs who's been eliminated. Each
+   group is a self-contained card with its own header (icon + title +
+   count) and a stacked list of pendaftar cards inside. */
+.juara-group {
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  margin-bottom: 10px;
+  overflow: hidden;
+  background: white;
+}
+.juara-group.lolos {
+  border-color: #BBF7D0;
+  background: linear-gradient(180deg, #F0FDF4 0%, #FFFFFF 60%);
+}
+.juara-group.gugur {
+  border-color: #FECACA;
+  background: linear-gradient(180deg, #FEF2F2 0%, #FFFFFF 60%);
+}
+.juara-group.pending {
+  border-color: #FDE68A;
+  background: linear-gradient(180deg, #FFFBEB 0%, #FFFFFF 60%);
+}
+.juara-group-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid #F3F4F6;
+}
+.juara-group.lolos .juara-group-header { color: #15803D; }
+.juara-group.gugur .juara-group-header { color: #991B1B; }
+.juara-group.pending .juara-group-header { color: #92400E; }
+.juara-group-icon {
+  width: 22px; height: 22px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.juara-group.lolos .juara-group-icon { background: #DCFCE7; color: #15803D; }
+.juara-group.gugur .juara-group-icon { background: #FEE2E2; color: #991B1B; }
+.juara-group.pending .juara-group-icon { background: #FEF3C7; color: #92400E; }
+.juara-group-count {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.06);
+  color: inherit;
+}
+.juara-group-body {
+  /* list of PendaftarCards lives here */
+}
+.juara-group-empty {
+  padding: 12px 14px;
+  font-size: 12px;
+  color: #9CA3AF;
+  font-style: italic;
 }
 /* =================== End juara picker =================== */
 

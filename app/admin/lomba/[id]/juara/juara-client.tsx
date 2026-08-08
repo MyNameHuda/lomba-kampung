@@ -420,6 +420,28 @@ function SectionPanel({
   const isTutup = section.tutupAt !== null;
   const hasJuara = section.pendaftar.some((p) => p.juaraRank !== null);
 
+  // v2: split pendaftar into 3 groups (Pending / Lolos / Gugur) for
+  // clearer admin UX — each group rendered as its own visually distinct
+  // box (green for Lolos, red for Gugur, amber for Pending during
+  // kualifikasi phase). The previous flat list with just a left-border
+  // color was hard to scan.
+  const pending = section.pendaftar.filter((p) => p.isFinalist === null);
+  const lolos = section.pendaftar
+    .filter((p) => p.isFinalist === 1)
+    // Juara 1/2/3 first (admin cares about ordering), then non-Juara
+    // Finalis by nama. Stable sort preserves DB order on tie.
+    .slice()
+    .sort((a, b) => {
+      if (a.juaraRank !== null && b.juaraRank !== null) return a.juaraRank - b.juaraRank;
+      if (a.juaraRank !== null) return -1;
+      if (b.juaraRank !== null) return 1;
+      return a.nama.localeCompare(b.nama);
+    });
+  const gugur = section.pendaftar
+    .filter((p) => p.isFinalist === 0)
+    .slice()
+    .sort((a, b) => a.nama.localeCompare(b.nama));
+
   return (
     <section className="juara-section">
       <header className="juara-section-header" style={{ borderColor: section.kategoriColorBorder || "#E5E7EB" }}>
@@ -433,17 +455,17 @@ function SectionPanel({
           </div>
         </div>
         <div className="flex gap-1 flex-wrap justify-end">
-          <span className="juara-badge rank-1 filled" title="Lolos">👥 {section.kualStatus.lolos}</span>
-          <span className="juara-badge rank-2 filled" title="Gugur" style={{ background: "#FEE2E2", color: "#991B1B" }}>✗ {section.kualStatus.gugur}</span>
-          {section.kualStatus.pending > 0 && (
-            <span className="juara-badge rank-3 filled" title="Pending" style={{ background: "#FEF3C7", color: "#92400E" }}>? {section.kualStatus.pending}</span>
+          <span className="juara-badge rank-1 filled" title="Lolos">👥 {lolos.length}</span>
+          <span className="juara-badge rank-2 filled" title="Gugur" style={{ background: "#FEE2E2", color: "#991B1B" }}>✗ {gugur.length}</span>
+          {pending.length > 0 && (
+            <span className="juara-badge rank-3 filled" title="Pending" style={{ background: "#FEF3C7", color: "#92400E" }}>? {pending.length}</span>
           )}
         </div>
       </header>
 
       {/* Per-kategori Tutup / Buka buttons */}
       {!isLocked && !isDraft && !isTutup && (
-        <div className="kual-actions mb-3">
+        <div className="kual-actions" style={{ margin: "12px 12px 0" }}>
           <button
             onClick={onTutup}
             disabled={!section.kualStatus.readyToTutup || section.kualStatus.total === 0 || busyAction === `tutup-${section.kategoriId}`}
@@ -458,13 +480,13 @@ function SectionPanel({
           </button>
           {!section.kualStatus.readyToTutup && section.kualStatus.total > 0 && (
             <span className="text-[11px] text-[#6B7280]">
-              Loloskan/Gugur semua pendaftar dulu ({section.kualStatus.pending} pending)
+              Loloskan/Gugur semua pendaftar dulu ({pending.length} pending)
             </span>
           )}
         </div>
       )}
       {!isLocked && !isDraft && isTutup && !hasJuara && (
-        <div className="kual-actions mb-3">
+        <div className="kual-actions" style={{ margin: "12px 12px 0" }}>
           <button
             onClick={onBuka}
             disabled={busyAction === `buka-${section.kategoriId}`}
@@ -486,23 +508,95 @@ function SectionPanel({
           <span>Belum ada peserta disetujui di kategori ini</span>
         </div>
       ) : (
-        <div className="space-y-2">
-          {section.pendaftar.map((p) => (
-            <PendaftarCard
-              key={p.id}
-              p={p}
-              kategoriId={section.kategoriId}
-              isTutup={isTutup}
-              isLocked={isLocked}
-              isDraft={isDraft}
-              busy={busy === p.id}
-              onLoloskan={() => onLoloskan(p.id)}
-              onGugur={() => onGugur(p.id)}
-              onClearFinalist={() => onClearFinalist(p.id)}
-              onSetRank={(rank) => onSetRank(p.id, rank)}
-              onClearRank={() => onClearRank(p.id)}
-            />
-          ))}
+        <div style={{ padding: "12px" }}>
+          {/* Pending group — only during kualifikasi phase */}
+          {!isTutup && pending.length > 0 && (
+            <div className="juara-group pending">
+              <div className="juara-group-header">
+                <span className="juara-group-icon"><i className="fas fa-clock"></i></span>
+                <span>Belum Diputuskan</span>
+                <span className="juara-group-count">{pending.length}</span>
+              </div>
+              <div className="juara-group-body">
+                {pending.map((p) => (
+                  <PendaftarCard
+                    key={p.id}
+                    p={p}
+                    kategoriId={section.kategoriId}
+                    isTutup={isTutup}
+                    isLocked={isLocked}
+                    isDraft={isDraft}
+                    busy={busy === p.id}
+                    onLoloskan={() => onLoloskan(p.id)}
+                    onGugur={() => onGugur(p.id)}
+                    onClearFinalist={() => onClearFinalist(p.id)}
+                    onSetRank={(rank) => onSetRank(p.id, rank)}
+                    onClearRank={() => onClearRank(p.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Lolos / Final group — Juara + non-Juara Finalis */}
+          {lolos.length > 0 && (
+            <div className="juara-group lolos">
+              <div className="juara-group-header">
+                <span className="juara-group-icon"><i className="fas fa-trophy"></i></span>
+                <span>{isTutup ? "Juara & Finalis" : "Lolos ke Final"}</span>
+                <span className="juara-group-count">{lolos.length}</span>
+              </div>
+              <div className="juara-group-body">
+                {lolos.map((p) => (
+                  <PendaftarCard
+                    key={p.id}
+                    p={p}
+                    kategoriId={section.kategoriId}
+                    isTutup={isTutup}
+                    isLocked={isLocked}
+                    isDraft={isDraft}
+                    busy={busy === p.id}
+                    onLoloskan={() => onLoloskan(p.id)}
+                    onGugur={() => onGugur(p.id)}
+                    onClearFinalist={() => onClearFinalist(p.id)}
+                    onSetRank={(rank) => onSetRank(p.id, rank)}
+                    onClearRank={() => onClearRank(p.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Gugur group */}
+          {gugur.length > 0 && (
+            <div className="juara-group gugur">
+              <div className="juara-group-header">
+                <span className="juara-group-icon"><i className="fas fa-xmark"></i></span>
+                <span>Gugur</span>
+                <span className="juara-group-count">{gugur.length}</span>
+              </div>
+              <div className="juara-group-body">
+                {gugur.map((p) => (
+                  <PendaftarCard
+                    key={p.id}
+                    p={p}
+                    kategoriId={section.kategoriId}
+                    isTutup={isTutup}
+                    isLocked={isLocked}
+                    isDraft={isDraft}
+                    busy={busy === p.id}
+                    onLoloskan={() => onLoloskan(p.id)}
+                    onGugur={() => onGugur(p.id)}
+                    onClearFinalist={() => onClearFinalist(p.id)}
+                    onSetRank={(rank) => onSetRank(p.id, rank)}
+                    onClearRank={() => onClearRank(p.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* All pending (no decision yet) — no boxes shown beyond pending */}
         </div>
       )}
     </section>
@@ -564,17 +658,19 @@ function PendaftarCard({
     );
   }
 
-  // Border color
-  const borderColor = isJuara
-    ? ["#FFD700", "#C0C0C0", "#CD7F32"][(p.juaraRank || 1) - 1]
-    : isLolos
-    ? "#3B82F6"
-    : isGugur
-    ? "#EF4444"
-    : undefined;
+  // Border color (per-card border-left removed in v2; the parent
+  // juara-group box does the visual work now. Keep this calculation
+  // commented out as a no-op so a future regression is easy to detect.)
+  // const borderColor = isJuara
+  //   ? ["#FFD700", "#C0C0C0", "#CD7F32"][(p.juaraRank || 1) - 1]
+  //   : isLolos
+  //   ? "#3B82F6"
+  //   : isGugur
+  //   ? "#EF4444"
+  //   : undefined;
 
   return (
-    <article className={`juara-card ${isJuara ? `is-juara-${p.juaraRank}` : ""}`} style={borderColor ? { borderLeftColor: borderColor } : undefined}>
+    <article className={`juara-card ${isJuara ? `is-juara-${p.juaraRank}` : ""}`}>
       <div className="pc-avatar">{getInitials(p.nama)}</div>
       <div className="flex-1 min-w-0">
         <div className="juara-nama">{p.nama}</div>
