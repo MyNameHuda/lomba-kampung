@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useNotify } from "@/components/notify-provider";
 import { getInitials } from "@/lib/format";
 import { SECTION_ICON, SECTION_COLOR } from "@/lib/constants";
+import html2canvas from "html2canvas";
 import type { AdminGroupKey, AdminGroupData, AdminSection, EligibleKategori, PesertaSlim as Peserta } from "@/lib/types";
 
 // Re-export so existing imports of AdminGroupKey from this file keep working
@@ -25,6 +26,9 @@ export default function PesertaClient({
   const [busy, setBusy] = useState<number | null>(null);
   const [filter, setFilter] = useState<"all" | "hadir" | "belum">("all");
   const [editing, setEditing] = useState<Peserta | null>(null);
+  // v7: per-section export-to-image state. Section key being exported,
+  // or null when no export is in flight.
+  const [exporting, setExporting] = useState<AdminGroupKey | null>(null);
 
   // Sync with server-rendered prop after router.refresh()
   useEffect(() => {
@@ -131,6 +135,116 @@ export default function PesertaClient({
       notify.error(e instanceof Error ? e.message : "Gagal hapus peserta");
     } finally {
       setBusy(null);
+    }
+  }
+
+  // v7: Export a single kategori section as a PNG image. Builds an
+  // offscreen DOM with a clean 5-column table (Lomba, Kategori, No,
+  // Nama Peserta, Umur) + a header banner, then renders it via
+  // html2canvas and triggers a download. The DOM container is removed
+  // immediately after capture.
+  //
+  // Why offscreen + inline styles (not the visible DOM): the visible
+  // section has icons, action buttons, hadir toggle — we want a clean
+  // printable table with just the requested 4 columns. Inline styles
+  // ensure html2canvas paints correctly without depending on the
+  // page's CSS variables or external font loading.
+  async function exportSectionAsImage(sec: AdminSection, data: Peserta[]) {
+    if (data.length === 0) {
+      notify.warning("Tidak ada peserta untuk diexport");
+      return;
+    }
+    setExporting(sec.key);
+    // Build offscreen container
+    const container = document.createElement("div");
+    container.style.position = "fixed";
+    container.style.top = "-99999px";
+    container.style.left = "-99999px";
+    container.style.width = "720px";
+    container.style.background = "#ffffff";
+    container.style.padding = "24px";
+    container.style.fontFamily = "Arial, Helvetica, sans-serif";
+    container.style.color = "#1F2937";
+    container.style.boxSizing = "border-box";
+
+    const escapeHtml = (s: string) =>
+      s.replace(/[&<>"']/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string)
+      );
+    const today = new Date().toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+
+    container.innerHTML = `
+      <div style="border-bottom: 3px solid #E11D1D; padding-bottom: 12px; margin-bottom: 16px;">
+        <div style="font-size: 20px; font-weight: 800; color: #E11D1D; line-height: 1.2;">
+          ${escapeHtml(lomba.emoji)} ${escapeHtml(lomba.nama)}
+        </div>
+        <div style="font-size: 14px; color: #6B7280; margin-top: 6px; font-weight: 600;">
+          Kategori: ${escapeHtml(sec.title)} &middot; ${escapeHtml(sec.rangeLabel)}
+        </div>
+        <div style="font-size: 12px; color: #9CA3AF; margin-top: 4px;">
+          ${data.length} peserta &middot; Dicetak ${escapeHtml(today)}
+        </div>
+      </div>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.4;">
+        <thead>
+          <tr style="background: #E11D1D; color: #ffffff;">
+            <th style="padding: 10px 8px; text-align: left; border: 1px solid #cbd5e1; font-weight: 700;">Lomba</th>
+            <th style="padding: 10px 8px; text-align: left; border: 1px solid #cbd5e1; font-weight: 700;">Kategori</th>
+            <th style="padding: 10px 8px; text-align: center; border: 1px solid #cbd5e1; font-weight: 700; width: 36px;">No</th>
+            <th style="padding: 10px 8px; text-align: left; border: 1px solid #cbd5e1; font-weight: 700;">Nama Peserta</th>
+            <th style="padding: 10px 8px; text-align: center; border: 1px solid #cbd5e1; font-weight: 700; width: 56px;">Umur</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data
+            .map(
+              (p, i) => `
+            <tr style="background: ${i % 2 === 0 ? "#ffffff" : "#F9FAFB"};">
+              <td style="padding: 8px; border: 1px solid #e5e7eb;">${escapeHtml(lomba.nama)}</td>
+              <td style="padding: 8px; border: 1px solid #e5e7eb;">${escapeHtml(sec.title)}</td>
+              <td style="padding: 8px; border: 1px solid #e5e7eb; text-align: center; color: #6B7280;">${i + 1}</td>
+              <td style="padding: 8px; border: 1px solid #e5e7eb; font-weight: 600;">${escapeHtml(p.nama)}</td>
+              <td style="padding: 8px; border: 1px solid #e5e7eb; text-align: center;">${p.umur} th</td>
+            </tr>
+          `
+            )
+            .join("")}
+        </tbody>
+      </table>
+      <div style="margin-top: 14px; padding-top: 10px; border-top: 1px solid #e5e7eb; font-size: 10px; color: #9CA3AF; text-align: center;">
+        Daftar Peserta &middot; ${escapeHtml(lomba.nama)} &middot; ${escapeHtml(sec.title)}
+      </div>
+    `;
+    document.body.appendChild(container);
+
+    try {
+      const canvas = await html2canvas(container, {
+        backgroundColor: "#ffffff",
+        scale: 2, // retina-quality
+        logging: false,
+        useCORS: true,
+      });
+      const dataUrl = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      const safeName = `${lomba.nama}-${sec.title}`
+        .replace(/[^a-zA-Z0-9.-]+/g, "_")
+        .replace(/_+/g, "_");
+      link.href = dataUrl;
+      link.download = `${safeName}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      notify.success(`Export ${sec.title} berhasil (${data.length} peserta)`);
+    } catch (e) {
+      console.error("Export failed:", e);
+      notify.error("Gagal export gambar");
+    } finally {
+      document.body.removeChild(container);
+      setExporting(null);
     }
   }
 
@@ -263,6 +377,7 @@ export default function PesertaClient({
           const data = items[sec.key] || [];
           if (data.length === 0) return null;
           const c = SECTION_COLOR[sec.key as keyof typeof SECTION_COLOR];
+          const isExporting = exporting === sec.key;
           return (
             <div key={sec.key} className={`rounded-lg border ${c.bg} ${c.border} overflow-hidden`}>
               <div className={`px-3.5 py-2.5 flex items-center gap-2 text-[12px] font-bold ${c.text}`}>
@@ -272,6 +387,20 @@ export default function PesertaClient({
                 <span className="ml-auto bg-white/60 px-2 py-0.5 rounded-full text-[11px]">
                   {data.length} orang
                 </span>
+                {/* v7: Export-to-image button per kategori section */}
+                <button
+                  type="button"
+                  onClick={() => exportSectionAsImage(sec, data)}
+                  disabled={exporting !== null}
+                  className="ml-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/80 hover:bg-white text-[11px] font-bold border border-current/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title={`Export ${sec.title} sebagai gambar PNG`}
+                >
+                  {isExporting ? (
+                    <><i className="fas fa-spinner fa-spin"></i> Export...</>
+                  ) : (
+                    <><i className="fas fa-image"></i> Export</>
+                  )}
+                </button>
               </div>
               <div className="bg-white">
                 <table className="w-full border-collapse text-[13px] mobile-card-table">
