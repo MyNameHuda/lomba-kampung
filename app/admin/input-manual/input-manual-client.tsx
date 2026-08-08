@@ -51,6 +51,11 @@ const displayKatName = (id: string, kats: Kat[]) => {
 const SORT_BY_NAME_ASC = (a: { nama: string }, b: { nama: string }) =>
   a.nama.localeCompare(b.nama, "id", { sensitivity: "base" });
 
+// v5: sort by umur ASC, with nama as tiebreaker so the order is
+// deterministic when two peserta share the same age.
+const SORT_BY_UMUR_ASC = (a: { umur: number; nama: string }, b: { umur: number; nama: string }) =>
+  a.umur - b.umur || SORT_BY_NAME_ASC(a, b);
+
 // =================== Group styling (v2 picker) ===================
 // Each picker group gets a distinct pastel tint + icon so the kategori
 // separator is visually obvious. Hardcoded here (not from DB) because
@@ -146,6 +151,11 @@ export default function InputManualClient({
   // resets the state.
   const [copySource, setCopySource] = useState<SourceLomba | null>(null);
   const [copying, setCopying] = useState(false);
+
+  // v5: peserta list sort mode. "nama" = A-Z by name, "umur" = by age
+  // ascending then by nama as tiebreaker. Toggled from a button group
+  // in the Daftar Peserta card header.
+  const [sortMode, setSortMode] = useState<"nama" | "umur">("nama");
 
   // Derive selected lomba + eligible kats from the master list
   const selectedLomba = useMemo(
@@ -638,6 +648,23 @@ export default function InputManualClient({
                     {totalPesertaForLomba} peserta · publik & manual
                   </div>
                 </div>
+                {/* v5: sort toggle — Nama A-Z vs Umur */}
+                {pesertaList.length > 1 && (
+                  <div className="inline-flex rounded-lg border border-[#E5E7EB] overflow-hidden bg-white">
+                    <SortButton
+                      active={sortMode === "nama"}
+                      onClick={() => setSortMode("nama")}
+                      icon="fa-arrow-down-a-z"
+                      label="Nama A-Z"
+                    />
+                    <SortButton
+                      active={sortMode === "umur"}
+                      onClick={() => setSortMode("umur")}
+                      icon="fa-arrow-down-1-9"
+                      label="Umur"
+                    />
+                  </div>
+                )}
               </div>
               {pesertaList.length === 0 ? (
                 <div className="p-8 text-center text-[#6B7280]">
@@ -648,7 +675,7 @@ export default function InputManualClient({
                 <div className="divide-y divide-[#E5E7EB]">
                   {pesertaList
                     .slice()
-                    .sort(SORT_BY_NAME_ASC)
+                    .sort(sortMode === "nama" ? SORT_BY_NAME_ASC : SORT_BY_UMUR_ASC)
                     .map((p) => (
                       <PesertaRowItem
                         key={p.id}
@@ -756,6 +783,37 @@ function Chip({
         active
           ? "bg-primary border-primary text-white"
           : "bg-white border-[#E5E7EB] text-[#374151] hover:border-[#D1D5DB]"
+      }`}
+    >
+      <i className={`fas ${icon} text-[10px]`}></i>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+// =====================================================================
+// Sort toggle button (v5) — used in the Daftar Peserta card header
+// =====================================================================
+function SortButton({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: string;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-bold transition-colors ${
+        active
+          ? "bg-primary text-white"
+          : "bg-white text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#1F2937]"
       }`}
     >
       <i className={`fas ${icon} text-[10px]`}></i>
