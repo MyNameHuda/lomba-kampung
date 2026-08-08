@@ -3,7 +3,9 @@
 import { useState, useEffect, useMemo, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useNotify } from "@/components/notify-provider";
-import { getInitials, timeAgo } from "@/lib/format";
+import { getInitials } from "@/lib/format";
+import { SUMBER } from "@/lib/constants";
+import type { PesertaSlim } from "@/lib/types";
 
 type Lomba = {
   id: number;
@@ -18,8 +20,11 @@ type Kat = {
   min: number;
   max: number;
   autoAge: boolean;
+  urutan?: number;
 };
-type Recent = { id: number; nama: string; lombaEmoji: string; lombaNama: string; status: string; createdAt: string };
+
+// Server-provided rows (already slimmed in page.tsx).
+type PesertaRow = PesertaSlim & { sumber: "publik" | "manual"; createdAt: number };
 
 // v2: collapse k_anak_l + k_anak_p into a single "Anak" picker option
 // when both are eligible, matching the public daftar-form pattern. The
@@ -28,23 +33,55 @@ type Recent = { id: number; nama: string; lombaEmoji: string; lombaNama: string;
 // warga they're inputting, so no need to ask twice.
 const VIRTUAL_ANAK_ID = "_anak_virtual";
 
-export default function InputManualClient({ lombaList, kats, recent }: { lombaList: Lomba[]; kats: Kat[]; recent: Recent[] }) {
+// Display collapse for k_anak_l + k_anak_p — used in the lomba picker
+// so admin sees one "Anak" group instead of two near-duplicates. The
+// underlying k_anak_l / k_anak_p ids still pass through to the DB.
+const ANAK_COLLAPSED_ID = "_anak_collapsed";
+const displayKatId = (id: string) =>
+  id === "k_anak_l" || id === "k_anak_p" ? ANAK_COLLAPSED_ID : id;
+const displayKatName = (id: string, kats: Kat[]) => {
+  if (id === ANAK_COLLAPSED_ID) return "Anak";
+  return kats.find((k) => k.id === id)?.nama ?? id;
+};
+
+const SORT_BY_NAME_ASC = (a: { nama: string }, b: { nama: string }) =>
+  a.nama.localeCompare(b.nama, "id", { sensitivity: "base" });
+
+export default function InputManualClient({
+  lombaList,
+  kats,
+  pesertaByLomba,
+}: {
+  lombaList: Lomba[];
+  kats: Kat[];
+  pesertaByLomba: Record<number, PesertaRow[]>;
+}) {
   const router = useRouter();
   const notify = useNotify();
-  const [lombaId, setLombaId] = useState<number | null>(lombaList.find((l) => l.status === "aktif")?.id || lombaList[0]?.id || null);
+  const [lombaId, setLombaId] = useState<number | null>(
+    lombaList.find((l) => l.status === "aktif")?.id || lombaList[0]?.id || null
+  );
   const [nama, setNama] = useState("");
   const [jenisKelamin, setJenisKelamin] = useState<"L" | "P">("L");
   const [kategoriId, setKategoriId] = useState<string>("");
   const [umur, setUmur] = useState<number | null>(null);
-  const [hadir, setHadir] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  // v2: search filter for lomba dropdown (21 lomba in prod is too long
-  // to scroll through). Keeps the current select element; just narrows
-  // the options shown.
-  const [lombaSearch, setLombaSearch] = useState("");
+
+  // v3: filter chip state. "all" shows every lomba; otherwise we show
+  // only lomba whose kategoriEligible contains the chip's kategoriId
+  // (with k_anak_l + k_anak_p collapsed into one "Anak" chip).
+  const [selectedKategori, setSelectedKategori] = useState<string>("all");
+
+  // Local peserta list — mirrors server prop, allows optimistic updates
+  // after edit/delete without a full router.refresh.
+  const [pesertaList, setPesertaList] = useState<PesertaRow[]>([]);
+  const [editingPeserta, setEditingPeserta] = useState<PesertaRow | null>(null);
 
   // Derive selected lomba + eligible kats from the master list
-  const selectedLomba = useMemo(() => lombaList.find((l) => l.id === lombaId) || null, [lombaId, lombaList]);
+  const selectedLomba = useMemo(
+    () => lombaList.find((l) => l.id === lombaId) || null,
+    [lombaId, lombaList]
+  );
 
   // Collapse k_anak_l + k_anak_p into a single virtual option when both
   // are eligible. The virtual id "_anak_virtual" gets mapped to the
@@ -56,8 +93,6 @@ export default function InputManualClient({ lombaList, kats, recent }: { lombaLi
     const hasL = baseKats.some((k) => k.id === "k_anak_l");
     const hasP = baseKats.some((k) => k.id === "k_anak_p");
     if (hasL && hasP) {
-      // Replace k_anak_l + k_anak_p with a single virtual "Anak" option.
-      // Reuse k_anak_l's metadata (min/max/autoAge) — both share same.
       const sample = baseKats.find((k) => k.id === "k_anak_l")!;
       return [
         ...baseKats.filter((k) => k.id !== "k_anak_l" && k.id !== "k_anak_p"),
@@ -67,7 +102,10 @@ export default function InputManualClient({ lombaList, kats, recent }: { lombaLi
     return baseKats;
   }, [selectedLomba, kats]);
 
-  const selectedKat = useMemo(() => eligibleKats.find((k) => k.id === kategoriId) || null, [eligibleKats, kategoriId]);
+  const selectedKat = useMemo(
+    () => eligibleKats.find((k) => k.id === kategoriId) || null,
+    [eligibleKats, kategoriId]
+  );
   const skipUmur = selectedKat?.autoAge ?? false;
 
   // v3: When lombaId changes, derive kategoriId + umur from the new
@@ -75,30 +113,28 @@ export default function InputManualClient({ lombaList, kats, recent }: { lombaLi
   // when the user picks a new lomba (not on every eligibleKats/
   // kategoriId/umur change, which would cause race conditions with
   // the manual setKategoriId calls inside changeLombaId).
-  //
-  // The earlier version had `[eligibleKats, kategoriId, umur]` deps
-  // which caused a real bug: when the user searched for a lomba and
-  // clicked a result, the form fields (Kategori Usia, Umur) didn't
-  // update to match the new lomba's specs. The old useEffect would
-  // race with changeLombaId's manual setKategoriId and leave the
-  // state pointing to the OLD lomba's first eligible.
   useEffect(() => {
     if (eligibleKats.length === 0) {
       setKategoriId("");
       setUmur(null);
       return;
     }
-    // Always snap to the first eligible of the new lomba. This is
-    // the simpler, more predictable behavior — admin is switching
-    // contexts, not preserving the old kategori selection.
     const first = eligibleKats[0];
     setKategoriId(first.id);
     setUmur(first.autoAge ? first.min : null);
   }, [lombaId]);
 
+  // Sync local peserta list whenever the selected lomba or server prop changes
+  useEffect(() => {
+    if (!lombaId) {
+      setPesertaList([]);
+      return;
+    }
+    setPesertaList(pesertaByLomba[lombaId] || []);
+  }, [lombaId, pesertaByLomba]);
+
   function changeLombaId(newId: number) {
     setLombaId(newId);
-    setLombaSearch(""); // clear search when changing lomba
     // Don't manually setKategoriId/setUmur here — the useEffect above
     // derives them from eligibleKats. This avoids race conditions
     // where this function's updates would be overwritten by the
@@ -124,8 +160,14 @@ export default function InputManualClient({ lombaList, kats, recent }: { lombaLi
       // based on the selected jenis_kelamin. Other ids pass through.
       const realKategoriId =
         kategoriId === VIRTUAL_ANAK_ID
-          ? jenisKelamin === "L" ? "k_anak_l" : "k_anak_p"
+          ? jenisKelamin === "L"
+            ? "k_anak_l"
+            : "k_anak_p"
           : kategoriId;
+      // v2: manual input is always treated as auto-hadir. Admin is at
+      // the balai physically filling in the form — they have visual
+      // confirmation that the warga is in front of them. No more
+      // "Tandai sebagai Hadir" checkbox.
       const res = await fetch("/api/admin/pendaftar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -135,7 +177,7 @@ export default function InputManualClient({ lombaList, kats, recent }: { lombaLi
           kategoriId: realKategoriId,
           umur: umur ?? selectedKat?.min ?? 0,
           lombaId,
-          hadir,
+          hadir: true,
         }),
       });
       const data = await res.json();
@@ -143,8 +185,6 @@ export default function InputManualClient({ lombaList, kats, recent }: { lombaLi
       notify.success(`Berhasil! Nomor: ${data.nomor}`);
       setNama("");
       // Keep lomba, jenisKelamin, kategoriId, umur as-is so admin can do rapid input.
-      // Just reset hadir for the next entry.
-      setHadir(false);
       setTimeout(() => router.refresh(), 500);
     } catch (e) {
       notify.error(e instanceof Error ? e.message : "Gagal");
@@ -153,21 +193,115 @@ export default function InputManualClient({ lombaList, kats, recent }: { lombaLi
     }
   }
 
-  const eligibleAges = selectedKat && !skipUmur
-    ? Array.from({ length: selectedKat.max - selectedKat.min + 1 }, (_, i) => selectedKat.min + i)
-    : [];
+  const eligibleAges =
+    selectedKat && !skipUmur
+      ? Array.from({ length: selectedKat.max - selectedKat.min + 1 }, (_, i) => selectedKat.min + i)
+      : [];
 
-  // v2: filter lomba list by search query (case-insensitive, matches nama).
-  // When search is empty, show all lomba. Sorted by urutan (already
-  // sorted from server).
-  const filteredLombaList = useMemo(() => {
-    const q = lombaSearch.trim().toLowerCase();
-    if (!q) return lombaList;
-    return lombaList.filter((l) => l.nama.toLowerCase().includes(q));
-  }, [lombaList, lombaSearch]);
+  // ============ Lomba picker (v3: grouped by kategori, no search) ============
+  //
+  // - When selectedKategori === "all", show all lomba grouped by their
+  //   primary eligible kategori, each section sorted A-Z.
+  // - When selectedKategori is a specific kategori, show only lomba
+  //   whose kategoriEligible contains that kategori, flat A-Z sorted.
+  //
+  // k_anak_l + k_anak_p are collapsed into a single "Anak" group for
+  // display (consistent with the form picker behavior).
+  const lombaByKategori = useMemo(() => {
+    const sorted = [...lombaList].sort(SORT_BY_NAME_ASC);
+    const map = new Map<string, { displayName: string; lomba: Lomba[] }>();
+    for (const l of sorted) {
+      const raw = l.kategoriEligible[0];
+      if (!raw) {
+        // Lomba with no kategori — bucket into a synthetic "Lainnya" group
+        if (!map.has("_uncategorized")) {
+          map.set("_uncategorized", { displayName: "Lainnya", lomba: [] });
+        }
+        map.get("_uncategorized")!.lomba.push(l);
+        continue;
+      }
+      const groupKey = displayKatId(raw);
+      if (!map.has(groupKey)) {
+        map.set(groupKey, { displayName: displayKatName(groupKey, kats), lomba: [] });
+      }
+      map.get(groupKey)!.lomba.push(l);
+    }
+    // Sort groups: known kategori first by urutan, then by displayName, then "Lainnya" last
+    const urutanById = new Map(kats.map((k) => [k.id, k.urutan]));
+    return Array.from(map.entries()).sort(([a, adisp], [b, bdisp]) => {
+      if (a === "_uncategorized") return 1;
+      if (b === "_uncategorized") return -1;
+      // If a or b is the collapsed Anak group, slot it after the canonical k_balita
+      const aOrder = a === ANAK_COLLAPSED_ID ? 2 : urutanById.get(a) ?? 99;
+      const bOrder = b === ANAK_COLLAPSED_ID ? 2 : urutanById.get(b) ?? 99;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return adisp.displayName.localeCompare(bdisp.displayName, "id");
+    });
+  }, [lombaList, kats]);
+
+  // Which chip categories are actually present in lombaList?
+  // Used to only show chips for kategori that have at least one lomba.
+  const availableKategori = useMemo(() => {
+    const seen = new Set<string>();
+    for (const l of lombaList) {
+      for (const k of l.kategoriEligible) {
+        seen.add(displayKatId(k));
+      }
+    }
+    return Array.from(seen);
+  }, [lombaList]);
+
+  // The final list of lomba shown in the picker (after filter chip).
+  // When "all" → return the grouped structure. When filtered → flat list.
+  const filteredLombaGroups = useMemo(() => {
+    if (selectedKategori === "all") return lombaByKategori;
+    const sorted = lombaList
+      .filter((l) =>
+        l.kategoriEligible.some((k) => displayKatId(k) === selectedKategori)
+      )
+      .sort(SORT_BY_NAME_ASC);
+    const name = displayKatName(selectedKategori, kats);
+    return [[selectedKategori, { displayName: name, lomba: sorted }]] as Array<
+      [string, { displayName: string; lomba: Lomba[] }]
+    >;
+  }, [lombaByKategori, selectedKategori, lombaList, kats]);
+
+  // ============ CRUD handlers ============
+  async function deletePeserta(p: PesertaRow) {
+    const ok = await notify.confirm({
+      title: "Hapus Peserta",
+      message: `Hapus peserta "${p.nama}" (${p.nomor})?\n\nTindakan ini tidak bisa dibatalkan.`,
+      confirmText: "Hapus",
+      variant: "danger",
+    });
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/admin/pendaftar/${p.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Gagal");
+      }
+      setPesertaList((prev) => prev.filter((it) => it.id !== p.id));
+      notify.success(`Peserta "${p.nama}" berhasil dihapus`);
+      // Light refresh so counts on the admin card stay in sync.
+      setTimeout(() => router.refresh(), 500);
+    } catch (e) {
+      notify.error(e instanceof Error ? e.message : "Gagal hapus peserta");
+    }
+  }
+
+  function applyEdit(updated: PesertaRow) {
+    setPesertaList((prev) => prev.map((it) => (it.id === updated.id ? updated : it)));
+    setEditingPeserta(null);
+    notify.success("Peserta berhasil diperbarui");
+    setTimeout(() => router.refresh(), 500);
+  }
+
+  const totalPesertaForLomba = selectedLomba ? pesertaList.length : 0;
 
   return (
     <>
+      {/* ============ Header callout ============ */}
       <div className="bg-[#FCE0E0] border border-[#FBE0E0] border-l-4 border-l-[#E11D1D] rounded p-3.5 mb-5 flex gap-3 items-start">
         <div className="w-8 h-8 rounded-full bg-[#E11D1D] text-white flex items-center justify-center flex-shrink-0 text-[13px]">
           <i className="fas fa-circle-info"></i>
@@ -175,225 +309,649 @@ export default function InputManualClient({ lombaList, kats, recent }: { lombaLi
         <div className="text-[13px] text-[#9D1010] leading-relaxed">
           <strong className="block mb-1">Kapan pakai fitur ini?</strong>
           Untuk warga yang tidak bisa mendaftar sendiri (gaptek, tidak punya HP, atau datang langsung ke balai).
-          Peserta otomatis <strong>Disetujui</strong> tanpa review admin.
+          Peserta otomatis <strong>Disetujui</strong> dan dianggap <strong>Hadir</strong> tanpa review admin.
         </div>
       </div>
 
-      <div className="card max-w-[720px] p-6">
-        <h3 className="text-base font-bold mb-1">📝 Data Peserta</h3>
-        <div className="text-xs text-[#6B7280] mb-5">
-          Semua field bertanda <span className="text-primary">*</span> wajib diisi
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 items-start">
+        {/* ============ LEFT: form card ============ */}
+        <div className="lg:col-span-2 space-y-5">
+          <div className="card p-6">
+            <h3 className="text-base font-bold mb-1">📝 Data Peserta</h3>
+            <div className="text-xs text-[#6B7280] mb-5">
+              Semua field bertanda <span className="text-primary">*</span> wajib diisi
+            </div>
 
-        <form onSubmit={submit} className="space-y-4">
-          <div>
-            <label className="label">Pilih Lomba <span className="text-primary">*</span></label>
-            {/* v2: search bar above the dropdown. With 21+ lomba in prod
-                the native <select> is hard to scroll through. Type-ahead
-                filter narrows the options. */}
-            <div className="relative mb-2">
-              <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF] text-sm pointer-events-none"></i>
-              <input
-                type="text"
-                value={lombaSearch}
-                onChange={(e) => setLombaSearch(e.target.value)}
-                placeholder="Cari nama lomba..."
-                className="w-full pl-10 pr-10 py-2 border border-[#E5E7EB] rounded-lg text-sm bg-white focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary-light transition-colors"
-              />
-              {lombaSearch && (
+            <form onSubmit={submit} className="space-y-4">
+              <div>
+                <label className="label">Pilih Lomba <span className="text-primary">*</span></label>
+                <KategoriChips
+                  available={availableKategori}
+                  kats={kats}
+                  current={selectedKategori}
+                  onSelect={setSelectedKategori}
+                />
+                <LombaPicker
+                  groups={filteredLombaGroups}
+                  selectedId={lombaId}
+                  onSelect={changeLombaId}
+                  allCount={lombaList.length}
+                  currentKategori={selectedKategori}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Nama Lengkap <span className="text-primary">*</span></label>
+                  <input
+                    type="text"
+                    value={nama}
+                    onChange={(e) => setNama(e.target.value)}
+                    placeholder="Contoh: Hartono Wijaya"
+                    className="input"
+                  />
+                </div>
+                <div>
+                  <label className="label">Jenis Kelamin <span className="text-primary">*</span></label>
+                  <div className="radio-group">
+                    <div
+                      className={`radio-option ${jenisKelamin === "L" ? "active" : ""}`}
+                      onClick={() => setJenisKelamin("L")}
+                    >
+                      <i className="fas fa-mars"></i> Laki-laki
+                    </div>
+                    <div
+                      className={`radio-option ${jenisKelamin === "P" ? "active" : ""}`}
+                      onClick={() => setJenisKelamin("P")}
+                    >
+                      <i className="fas fa-venus"></i> Perempuan
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Kategori Usia <span className="text-primary">*</span></label>
+                {eligibleKats.length === 0 ? (
+                  <div className="bg-[#FEE2E2] border border-[#FECACA] text-[#991B1B] text-sm rounded p-3">
+                    <i className="fas fa-exclamation-triangle"></i> Lomba ini belum memiliki kategori eligible.
+                    Hubungi admin lomba untuk mengatur kategori.
+                  </div>
+                ) : (
+                  <>
+                    <div
+                      className="radio-group"
+                      style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}
+                    >
+                      {eligibleKats.map((k) => (
+                        <div
+                          key={k.id}
+                          className={`radio-option ${kategoriId === k.id ? "active" : ""}`}
+                          onClick={() => selectKategori(k.id)}
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 4,
+                            padding: "12px 8px",
+                            lineHeight: 1.25,
+                          }}
+                        >
+                          <strong style={{ display: "block", lineHeight: 1.2 }}>{k.nama}</strong>
+                          <small
+                            className="text-[10px] opacity-70"
+                            style={{ display: "block", lineHeight: 1.2, fontWeight: 500 }}
+                          >
+                            {k.autoAge ? `${k.min}+ th · otomatis` : `${k.min}-${k.max} th`}
+                          </small>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="text-[11px] text-[#6B7280] mt-1.5 text-center">
+                      {eligibleKats.length} kategori tersedia untuk lomba ini
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Pilih Umur — skip kalau autoAge (Dewasa) */}
+              {selectedKat && !skipUmur && (
+                <div>
+                  <label className="label">Pilih Umur <span className="text-primary">*</span></label>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {eligibleAges.map((a) => (
+                      <button
+                        key={a}
+                        type="button"
+                        onClick={() => setUmur(a)}
+                        className={`py-2 border-2 rounded text-sm font-bold min-h-[40px] ${
+                          umur === a ? "bg-primary border-primary text-white" : "bg-white border-[#E5E7EB]"
+                        }`}
+                      >
+                        {a}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Info kalau autoAge — tidak perlu pilih umur */}
+              {selectedKat && skipUmur && (
+                <div className="bg-[#FCE0E0] border border-[#FBE0E0] rounded p-3 flex items-start gap-2">
+                  <i className="fas fa-circle-info text-[#9D1010] mt-0.5"></i>
+                  <div className="text-[12px] text-[#9D1010]">
+                    <strong>Kategori {selectedKat.nama}:</strong> usia otomatis tercatat{" "}
+                    <strong>{selectedKat.min} tahun ke atas</strong>. Tidak perlu pilih umur.
+                  </div>
+                </div>
+              )}
+
+              {/* v2: removed "Tandai sebagai Hadir" checkbox — manual input
+                  is always treated as auto-hadir (admin is physically at
+                  the balai, warga is in front of them). */}
+
+              <div className="flex gap-2 pt-5 mt-6 border-t border-[#E5E7EB]">
                 <button
                   type="button"
-                  onClick={() => setLombaSearch("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-[#9CA3AF] hover:bg-[#F3F4F6] hover:text-[#6B7280] flex items-center justify-center"
-                  aria-label="Bersihkan pencarian"
+                  className="btn btn-secondary flex-1"
+                  onClick={() => {
+                    setNama("");
+                    setUmur(skipUmur && selectedKat ? selectedKat.min : null);
+                  }}
                 >
-                  <i className="fas fa-xmark text-[12px]"></i>
+                  Batal
                 </button>
-              )}
-            </div>
-            <select
-              value={lombaId ?? ""}
-              onChange={(e) => changeLombaId(Number(e.target.value))}
-              className="input"
-              size={Math.min(8, Math.max(3, filteredLombaList.length))}
-            >
-              {filteredLombaList.length === 0 ? (
-                <option disabled value="">Tidak ada lomba yang cocok</option>
-              ) : (
-                filteredLombaList.map((l) => (
-                  <option key={l.id} value={l.id}>{l.emoji} {l.nama}</option>
-                ))
-              )}
-            </select>
-            {lombaSearch && (
-              <div className="text-[11px] text-[#6B7280] mt-1.5">
-                {filteredLombaList.length} dari {lombaList.length} lomba cocok dengan "{lombaSearch}"
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="btn btn-primary flex-1 disabled:opacity-60"
+                >
+                  {submitting ? (
+                    <>
+                      <i className="fas fa-spinner fa-spin"></i> Menyimpan...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-save"></i> Simpan & Setujui
+                    </>
+                  )}
+                </button>
               </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="label">Nama Lengkap <span className="text-primary">*</span></label>
-              <input
-                type="text"
-                value={nama}
-                onChange={(e) => setNama(e.target.value)}
-                placeholder="Contoh: Hartono Wijaya"
-                className="input"
-              />
-            </div>
-            <div>
-              <label className="label">Jenis Kelamin <span className="text-primary">*</span></label>
-              <div className="radio-group">
-                <div className={`radio-option ${jenisKelamin === "L" ? "active" : ""}`} onClick={() => setJenisKelamin("L")}>
-                  <i className="fas fa-mars"></i> Laki-laki
-                </div>
-                <div className={`radio-option ${jenisKelamin === "P" ? "active" : ""}`} onClick={() => setJenisKelamin("P")}>
-                  <i className="fas fa-venus"></i> Perempuan
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label className="label">Kategori Usia <span className="text-primary">*</span></label>
-            {eligibleKats.length === 0 ? (
-              <div className="bg-[#FEE2E2] border border-[#FECACA] text-[#991B1B] text-sm rounded p-3">
-                <i className="fas fa-exclamation-triangle"></i> Lomba ini belum memiliki kategori eligible.
-                Hubungi admin lomba untuk mengatur kategori.
-              </div>
-            ) : (
-              <>
-                <div className="radio-group" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                  {eligibleKats.map((k) => (
-                    <div
-                      key={k.id}
-                      className={`radio-option ${kategoriId === k.id ? "active" : ""}`}
-                      onClick={() => selectKategori(k.id)}
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 4,
-                        padding: "12px 8px",
-                        lineHeight: 1.25,
-                      }}
-                    >
-                      <strong style={{ display: "block", lineHeight: 1.2 }}>{k.nama}</strong>
-                      <small
-                        className="text-[10px] opacity-70"
-                        style={{ display: "block", lineHeight: 1.2, fontWeight: 500 }}
-                      >
-                        {k.autoAge ? `${k.min}+ th · otomatis` : `${k.min}-${k.max} th`}
-                      </small>
-                    </div>
-                  ))}
-                </div>
-                <div className="text-[11px] text-[#6B7280] mt-1.5 text-center">
-                  {eligibleKats.length} kategori tersedia untuk lomba ini
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Pilih Umur — skip kalau autoAge (Dewasa) */}
-          {selectedKat && !skipUmur && (
-            <div>
-              <label className="label">Pilih Umur <span className="text-primary">*</span></label>
-              <div className="grid grid-cols-5 gap-1.5">
-                {eligibleAges.map((a) => (
-                  <button
-                    key={a}
-                    type="button"
-                    onClick={() => setUmur(a)}
-                    className={`py-2 border-2 rounded text-sm font-bold min-h-[40px] ${
-                      umur === a ? "bg-primary border-primary text-white" : "bg-white border-[#E5E7EB]"
-                    }`}
-                  >
-                    {a}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Info kalau autoAge — tidak perlu pilih umur */}
-          {selectedKat && skipUmur && (
-            <div className="bg-[#FCE0E0] border border-[#FBE0E0] rounded p-3 flex items-start gap-2">
-              <i className="fas fa-circle-info text-[#9D1010] mt-0.5"></i>
-              <div className="text-[12px] text-[#9D1010]">
-                <strong>Kategori {selectedKat.nama}:</strong> usia otomatis tercatat{" "}
-                <strong>{selectedKat.min} tahun ke atas</strong>. Tidak perlu pilih umur.
-              </div>
-            </div>
-          )}
-
-          <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded p-3.5">
-            <label className="flex gap-2.5 items-start cursor-pointer text-[13px]">
-              <input type="checkbox" checked={hadir} onChange={(e) => setHadir(e.target.checked)} className="mt-0.5 w-[18px] h-[18px] accent-primary" />
-              <div>
-                <strong className="block text-[#1F2937] mb-0.5">
-                  <i className="fas fa-check-circle text-[#15803D]"></i> Tandai sebagai Hadir
-                </strong>
-                <span className="text-[#6B7280] text-xs">Centang jika warga ini sedang di depan Anda dan ikut serta sekarang</span>
-              </div>
-            </label>
-          </div>
-
-          <div className="flex gap-2 pt-5 mt-6 border-t border-[#E5E7EB]">
-            <button
-              type="button"
-              className="btn btn-secondary flex-1"
-              onClick={() => {
-                setNama("");
-                setUmur(skipUmur && selectedKat ? selectedKat.min : null);
-                setHadir(false);
-              }}
-            >
-              Batal
-            </button>
-            <button type="submit" disabled={submitting} className="btn btn-primary flex-1 disabled:opacity-60">
-              {submitting ? <><i className="fas fa-spinner fa-spin"></i> Menyimpan...</> : <><i className="fas fa-save"></i> Simpan & Setujui</>}
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* Recent */}
-      {recent.length > 0 && (
-        <div className="card mt-6 overflow-hidden">
-          <div className="p-4 border-b border-[#E5E7EB] flex items-center justify-between">
-            <div>
-              <div className="font-bold text-sm">Input Manual Terbaru</div>
-              <div className="text-xs text-[#6B7280] mt-0.5">5 peserta terakhir yang diinput</div>
-            </div>
-            <LinkButton href="/admin/peserta">Lihat semua →</LinkButton>
-          </div>
-          <div className="divide-y divide-[#E5E7EB]">
-            {recent.map((r) => (
-              <div key={r.id} className="p-3 flex items-center gap-3">
-                <div className="text-2xl leading-none">{r.lombaEmoji}</div>
-                <div className="flex-1 min-w-0 flex flex-col gap-0.5 leading-snug">
-                  <div className="font-semibold text-[13px]">{r.nama}</div>
-                  <div className="text-[11px] text-[#6B7280]">{r.lombaNama} · {timeAgo(r.createdAt)}</div>
-                </div>
-                {r.status === "disetujui" && <span className="status-badge status-approved"><i className="fas fa-check"></i> OK</span>}
-                {r.status === "hadir" && <span className="status-badge status-hadir"><i className="fas fa-check"></i> Hadir</span>}
-              </div>
-            ))}
+            </form>
           </div>
         </div>
+
+        {/* ============ RIGHT: peserta CRUD list ============ */}
+        <div className="lg:col-span-3 space-y-5">
+          {/* Selected-lomba header */}
+          {selectedLomba ? (
+            <div
+              className="card overflow-hidden"
+              style={{ background: "linear-gradient(135deg, #E11D1D 0%, #9D1010 100%)", color: "white", border: "none" }}
+            >
+              <div className="p-4 flex items-center gap-3">
+                <div className="text-4xl leading-none">{selectedLomba.emoji}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-base font-extrabold truncate">{selectedLomba.nama}</div>
+                  <div className="text-[12px] opacity-90 mt-0.5">
+                    <i className="fas fa-users"></i> {totalPesertaForLomba} peserta terdaftar
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="card p-6 text-center text-[#6B7280]">
+              <i className="fas fa-trophy text-3xl text-[#D1D5DB] block mb-2"></i>
+              Pilih lomba untuk melihat daftar peserta.
+            </div>
+          )}
+
+          {/* CRUD list (replaces "Input Manual Terbaru") */}
+          {selectedLomba && (
+            <div className="card overflow-hidden">
+              <div className="p-4 border-b border-[#E5E7EB] flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <div className="font-bold text-sm">Daftar Peserta</div>
+                  <div className="text-xs text-[#6B7280] mt-0.5">
+                    {totalPesertaForLomba} peserta · publik & manual
+                  </div>
+                </div>
+              </div>
+              {pesertaList.length === 0 ? (
+                <div className="p-8 text-center text-[#6B7280]">
+                  <i className="fas fa-user-slash text-3xl text-[#D1D5DB] block mb-2"></i>
+                  Belum ada peserta untuk lomba ini.
+                </div>
+              ) : (
+                <div className="divide-y divide-[#E5E7EB]">
+                  {pesertaList
+                    .slice()
+                    .sort(SORT_BY_NAME_ASC)
+                    .map((p) => (
+                      <PesertaRowItem
+                        key={p.id}
+                        p={p}
+                        onEdit={() => setEditingPeserta(p)}
+                        onDelete={() => deletePeserta(p)}
+                      />
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Edit modal */}
+      {editingPeserta && selectedLomba && (
+        <EditPesertaModal
+          peserta={editingPeserta}
+          eligibleKategori={selectedLomba.kategoriEligible.flatMap((kid) => {
+            const k = kats.find((x) => x.id === kid);
+            return k ? [{ id: k.id, nama: k.nama, min: k.min, max: k.max, autoAge: k.autoAge }] : [];
+          })}
+          onClose={() => setEditingPeserta(null)}
+          onSaved={applyEdit}
+        />
       )}
     </>
   );
 }
 
-function LinkButton({ href, children }: { href: string; children: ReactNode }) {
+// =====================================================================
+// Kategori filter chips — replaces the old search bar
+// =====================================================================
+function KategoriChips({
+  available,
+  kats,
+  current,
+  onSelect,
+}: {
+  available: string[];
+  kats: Kat[];
+  current: string;
+  onSelect: (id: string) => void;
+}) {
+  if (available.length === 0) return null;
   return (
-    <a href={href} className="text-xs text-primary font-semibold no-underline">
-      {children}
-    </a>
+    <div className="flex flex-wrap gap-1.5 mb-2.5">
+      <Chip
+        active={current === "all"}
+        onClick={() => onSelect("all")}
+        icon="fa-layer-group"
+        label="Semua"
+      />
+      {available.map((k) => {
+        const name = displayKatName(k, kats);
+        // Pick an icon per kategori (k_balita → fa-baby, k_anak → fa-child, k_dewasa → fa-user-tie)
+        let icon = "fa-folder";
+        if (k === "k_balita") icon = "fa-baby";
+        else if (k === ANAK_COLLAPSED_ID) icon = "fa-child";
+        else if (k === "k_dewasa_p") icon = "fa-user-tie";
+        return (
+          <Chip
+            key={k}
+            active={current === k}
+            onClick={() => onSelect(k)}
+            icon={icon}
+            label={name}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function Chip({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: string;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold border-2 transition-all ${
+        active
+          ? "bg-primary border-primary text-white"
+          : "bg-white border-[#E5E7EB] text-[#374151] hover:border-[#D1D5DB]"
+      }`}
+    >
+      <i className={`fas ${icon} text-[10px]`}></i>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+// =====================================================================
+// Lomba picker — grouped by kategori, A-Z sorted
+// =====================================================================
+function LombaPicker({
+  groups,
+  selectedId,
+  onSelect,
+  allCount,
+  currentKategori,
+}: {
+  groups: Array<[string, { displayName: string; lomba: Lomba[] }]>;
+  selectedId: number | null;
+  onSelect: (id: number) => void;
+  allCount: number;
+  currentKategori: string;
+}) {
+  if (allCount === 0) {
+    return (
+      <div className="bg-[#FEE2E2] border border-[#FECACA] text-[#991B1B] text-sm rounded p-3">
+        <i className="fas fa-exclamation-triangle"></i> Belum ada lomba. Tambahkan lomba dulu.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2.5">
+      {groups.map(([key, group], idx) => (
+        <div key={key}>
+          {groups.length > 1 && (
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <i className="fas fa-folder-open text-[10px] text-[#9CA3AF]"></i>
+              <span className="text-[10px] font-bold uppercase text-[#6B7280] tracking-wide">
+                {group.displayName}
+              </span>
+              <span className="text-[10px] text-[#9CA3AF]">· {group.lomba.length} lomba</span>
+            </div>
+          )}
+          <div className="space-y-1">
+            {group.lomba.map((l) => {
+              const active = l.id === selectedId;
+              return (
+                <button
+                  key={l.id}
+                  type="button"
+                  onClick={() => onSelect(l.id)}
+                  className={`w-full text-left p-2.5 rounded-lg border-2 transition-all flex items-center gap-2.5 ${
+                    active
+                      ? "border-primary bg-primary/5"
+                      : "border-[#E5E7EB] hover:border-[#D1D5DB] hover:bg-[#F9FAFB]"
+                  }`}
+                >
+                  <span className="text-xl leading-none">{l.emoji}</span>
+                  <span className={`flex-1 text-[13px] truncate ${active ? "font-bold text-primary" : "font-semibold text-[#1F2937]"}`}>
+                    {l.nama}
+                  </span>
+                  {l.status === "selesai" && (
+                    <span className="text-[9px] bg-[#F3F4F6] text-[#6B7280] px-1.5 py-0.5 rounded font-bold uppercase">
+                      Selesai
+                    </span>
+                  )}
+                  {active && <i className="fas fa-circle-check text-primary text-xs"></i>}
+                </button>
+              );
+            })}
+          </div>
+          {idx < groups.length - 1 && <div className="h-0.5" />}
+        </div>
+      ))}
+      {currentKategori !== "all" && groups.length === 0 && (
+        <div className="text-center py-4 text-[#6B7280] text-sm">
+          Tidak ada lomba untuk kategori ini.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// Per-row peserta card in the CRUD list
+// =====================================================================
+function PesertaRowItem({
+  p,
+  onEdit,
+  onDelete,
+}: {
+  p: PesertaRow;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const initials = getInitials(p.nama);
+  const sumberInfo = SUMBER[p.sumber];
+  return (
+    <div className="p-3 flex items-center gap-3">
+      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-accent text-white flex items-center justify-center text-[11px] font-bold flex-shrink-0">
+        {initials}
+      </div>
+      <div className="flex-1 min-w-0 flex flex-col gap-0.5 leading-snug">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="font-semibold text-[13px] truncate">{p.nama}</span>
+          <span className="text-[10px] text-[#6B7280] font-mono">{p.nomor.replace(/^LMB-/, "")}</span>
+        </div>
+        <div className="text-[11px] text-[#6B7280] flex items-center gap-1.5 flex-wrap">
+          <span className="bg-[#F3F4F6] px-1.5 py-0.5 rounded text-[10px] font-bold">
+            {p.umur} th
+          </span>
+          <span className="text-[#D1D5DB]">·</span>
+          <span>{p.jenisKelamin === "L" ? "Laki-laki" : "Perempuan"}</span>
+          <span className="text-[#D1D5DB]">·</span>
+          <span>{p.kategori}</span>
+          {p.noWa && (
+            <>
+              <span className="text-[#D1D5DB]">·</span>
+              <span>📞 {p.noWa}</span>
+            </>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        {p.sumber === "manual" && (
+          <span
+            className="text-[10px] font-bold px-1.5 py-0.5 rounded inline-flex items-center gap-1 bg-[#FCE0E0] text-[#9D1010]"
+            title="Diinput manual oleh admin"
+          >
+            <i className={`fas ${sumberInfo.icon} text-[9px]`}></i> {sumberInfo.label}
+          </span>
+        )}
+        {p.hadir && (
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded inline-flex items-center gap-1 bg-[#DCFCE7] text-[#15803D]">
+            <i className="fas fa-check text-[9px]"></i> Hadir
+          </span>
+        )}
+        <button
+          onClick={onEdit}
+          className="icon-action"
+          title="Edit peserta"
+        >
+          <i className="fas fa-pen"></i>
+        </button>
+        <button
+          onClick={onDelete}
+          className="icon-action reject"
+          title="Hapus peserta"
+        >
+          <i className="fas fa-trash"></i>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// Edit modal — used for CRUD update
+// =====================================================================
+function EditPesertaModal({
+  peserta,
+  eligibleKategori,
+  onClose,
+  onSaved,
+}: {
+  peserta: PesertaRow;
+  eligibleKategori: Array<{ id: string; nama: string; min: number; max: number; autoAge: boolean }>;
+  onClose: () => void;
+  onSaved: (updated: PesertaRow) => void;
+}) {
+  const [nama, setNama] = useState(peserta.nama);
+  const [noWa, setNoWa] = useState(peserta.noWa || "");
+  const [umur, setUmur] = useState<number>(peserta.umur);
+  const [jenisKelamin, setJenisKelamin] = useState<"L" | "P">(peserta.jenisKelamin);
+  const [kategoriId, setKategoriId] = useState(peserta.kategoriId);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  const kat = eligibleKategori.find((k) => k.id === kategoriId);
+  const umurWarning = kat && (umur < kat.min || umur > kat.max)
+    ? `Umur ${umur} di luar range kategori ${kat.nama} (${kat.min}-${kat.max} th)`
+    : "";
+
+  async function save() {
+    setErr("");
+    if (!nama.trim()) { setErr("Nama wajib diisi"); return; }
+    if (nama.trim().length < 2) { setErr("Nama minimal 2 karakter"); return; }
+    if (umur < 1 || umur > 120) { setErr("Umur harus 1-120"); return; }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/admin/pendaftar/${peserta.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nama: nama.trim(),
+          noWa: noWa.trim() || null,
+          umur,
+          jenisKelamin,
+          kategoriId,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "Gagal");
+      onSaved({
+        ...peserta,
+        nama: nama.trim(),
+        noWa: noWa.trim() || null,
+        umur,
+        jenisKelamin,
+        kategoriId,
+        kategori: kat?.nama || peserta.kategori,
+      });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Gagal menyimpan");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl max-w-[480px] w-full max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-5 border-b border-[#E5E7EB] flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-bold">Edit Peserta</h3>
+            <div className="text-[11px] text-[#6B7280] font-mono mt-0.5">{peserta.nomor}</div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-[#F9FAFB] text-[#6B7280] flex items-center justify-center hover:bg-[#E5E7EB]"
+          >
+            <i className="fas fa-xmark"></i>
+          </button>
+        </div>
+        <div className="p-5 overflow-y-auto space-y-3.5">
+          <div>
+            <label className="label">Nama <span className="text-primary">*</span></label>
+            <input
+              className="input"
+              value={nama}
+              onChange={(e) => setNama(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="label">
+              No WhatsApp{" "}
+              <span className="text-[10px] text-[#6B7280] font-normal">(opsional)</span>
+            </label>
+            <input
+              className="input"
+              value={noWa}
+              onChange={(e) => setNoWa(e.target.value)}
+              placeholder="0812-..."
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Umur <span className="text-primary">*</span></label>
+              <input
+                type="number"
+                className="input"
+                min={1}
+                max={120}
+                value={umur}
+                onChange={(e) => setUmur(Number(e.target.value))}
+              />
+            </div>
+            <div>
+              <label className="label">Jenis Kelamin <span className="text-primary">*</span></label>
+              <select
+                className="input"
+                value={jenisKelamin}
+                onChange={(e) => setJenisKelamin(e.target.value as "L" | "P")}
+              >
+                <option value="L">Laki-laki</option>
+                <option value="P">Perempuan</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="label">Kategori <span className="text-primary">*</span></label>
+            <select
+              className="input"
+              value={kategoriId}
+              onChange={(e) => setKategoriId(e.target.value)}
+            >
+              {eligibleKategori.map((k) => (
+                <option key={k.id} value={k.id}>
+                  {k.nama} ({k.min}-{k.max} th)
+                </option>
+              ))}
+            </select>
+          </div>
+          {umurWarning && (
+            <div className="bg-[#FEF3C7] border border-[#FDE68A] text-[#92400E] text-[12px] rounded p-2.5 leading-snug">
+              <i className="fas fa-triangle-exclamation"></i> {umurWarning}
+            </div>
+          )}
+          {err && (
+            <div className="bg-[#FEE2E2] text-[#991B1B] text-sm rounded p-3 leading-relaxed">
+              <i className="fas fa-exclamation-triangle"></i> {err}
+            </div>
+          )}
+        </div>
+        <div className="p-4 bg-[#F9FAFB] flex gap-2 border-t border-[#E5E7EB]">
+          <button onClick={onClose} className="btn btn-secondary flex-1">
+            Batal
+          </button>
+          <button onClick={save} disabled={saving} className="btn btn-primary flex-1 disabled:opacity-60">
+            {saving ? (
+              <>
+                <i className="fas fa-spinner fa-spin"></i> Menyimpan...
+              </>
+            ) : (
+              <>
+                <i className="fas fa-save"></i> Simpan
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
