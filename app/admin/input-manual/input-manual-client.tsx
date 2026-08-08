@@ -396,8 +396,11 @@ export default function InputManualClient({
       }
       setPesertaList((prev) => prev.filter((it) => it.id !== p.id));
       notify.success(`Peserta "${p.nama}" berhasil dihapus`);
-      // Light refresh so counts on the admin card stay in sync.
-      setTimeout(() => router.refresh(), 500);
+      // v6: NO router.refresh() — the local pesertaList is the source
+      // of truth for this view. The page is force-dynamic, so navigating
+      // away and back refetches from the server and shows the fresh
+      // counts. The setTimeout(500)+refresh pattern was causing the
+      // same "lomba changes" UX bug as submit (commit 725826a).
     } catch (e) {
       notify.error(e instanceof Error ? e.message : "Gagal hapus peserta");
     }
@@ -407,7 +410,9 @@ export default function InputManualClient({
     setPesertaList((prev) => prev.map((it) => (it.id === updated.id ? updated : it)));
     setEditingPeserta(null);
     notify.success("Peserta berhasil diperbarui");
-    setTimeout(() => router.refresh(), 500);
+    // v6: NO router.refresh() — same reason as deletePeserta above.
+    // Local state drives the UI; cross-page counts stay in sync via
+    // the revalidatePath() calls in the PATCH API handler.
   }
 
   // v4: copy peserta from another lomba (in same kategori) into the
