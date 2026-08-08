@@ -270,9 +270,36 @@ export default function InputManualClient({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal");
       notify.success(`Berhasil! Nomor: ${data.nomor}`);
+
+      // v6: build the new PesertaRow from form state + API response
+      // and append to local state directly. This replaces the previous
+      // setTimeout + router.refresh() pattern, which was causing a
+      // visible "page refresh" feel AND — in dev mode + race with the
+      // 500ms setTimeout — could lose the selected lombaId visual
+      // context (the right-side red card briefly disappeared).
+      //
+      // The local pesertaList is the source of truth for this view;
+      // when admin navigates away and back, the page is force-dynamic
+      // so fresh data is fetched from the server anyway.
+      const newPeserta: PesertaRow = {
+        id: data.id,
+        nomor: data.nomor,
+        nama: nama.trim(),
+        noWa: null,
+        umur: umur ?? selectedKat?.min ?? 0,
+        jenisKelamin,
+        kategoriId: realKategoriId,
+        kategori:
+          kats.find((k) => k.id === realKategoriId)?.nama ?? realKategoriId,
+        hadir: true,
+        sumber: "manual",
+        createdAt: Math.floor(Date.now() / 1000),
+      };
+      setPesertaList((prev) => [...prev, newPeserta]);
       setNama("");
-      // Keep lomba, jenisKelamin, kategoriId, umur as-is so admin can do rapid input.
-      setTimeout(() => router.refresh(), 500);
+      // Keep lomba, jenisKelamin, kategoriId, umur as-is so admin can
+      // do rapid input. NO router.refresh() — keeps UX snappy and
+      // prevents any state-reset risk.
     } catch (e) {
       notify.error(e instanceof Error ? e.message : "Gagal");
     } finally {
