@@ -70,47 +70,39 @@ export default function InputManualClient({ lombaList, kats, recent }: { lombaLi
   const selectedKat = useMemo(() => eligibleKats.find((k) => k.id === kategoriId) || null, [eligibleKats, kategoriId]);
   const skipUmur = selectedKat?.autoAge ?? false;
 
-  // Whenever lomba changes, ensure kategoriId points to an eligible one (or empty)
+  // v3: When lombaId changes, derive kategoriId + umur from the new
+  // eligibleKats. Declared with ONLY [lombaId] dep so it only runs
+  // when the user picks a new lomba (not on every eligibleKats/
+  // kategoriId/umur change, which would cause race conditions with
+  // the manual setKategoriId calls inside changeLombaId).
+  //
+  // The earlier version had `[eligibleKats, kategoriId, umur]` deps
+  // which caused a real bug: when the user searched for a lomba and
+  // clicked a result, the form fields (Kategori Usia, Umur) didn't
+  // update to match the new lomba's specs. The old useEffect would
+  // race with changeLombaId's manual setKategoriId and leave the
+  // state pointing to the OLD lomba's first eligible.
   useEffect(() => {
     if (eligibleKats.length === 0) {
-      if (kategoriId !== "") setKategoriId("");
-      if (umur !== null) setUmur(null);
+      setKategoriId("");
+      setUmur(null);
       return;
     }
-    if (!eligibleKats.some((k) => k.id === kategoriId)) {
-      const first = eligibleKats[0];
-      setKategoriId(first.id);
-      setUmur(first.autoAge ? first.min : null);
-    }
-  }, [eligibleKats, kategoriId, umur]);
+    // Always snap to the first eligible of the new lomba. This is
+    // the simpler, more predictable behavior — admin is switching
+    // contexts, not preserving the old kategori selection.
+    const first = eligibleKats[0];
+    setKategoriId(first.id);
+    setUmur(first.autoAge ? first.min : null);
+  }, [lombaId]);
 
   function changeLombaId(newId: number) {
     setLombaId(newId);
     setLombaSearch(""); // clear search when changing lomba
-    const l = lombaList.find((x) => x.id === newId);
-    if (!l) {
-      setKategoriId("");
-      setUmur(null);
-      return;
-    }
-    const set = new Set(l.kategoriEligible);
-    const baseKats = kats.filter((k) => set.has(k.id));
-    const hasL = baseKats.some((k) => k.id === "k_anak_l");
-    const hasP = baseKats.some((k) => k.id === "k_anak_p");
-    let first: Kat | undefined;
-    if (hasL && hasP) {
-      const sample = baseKats.find((k) => k.id === "k_anak_l")!;
-      first = { ...sample, id: VIRTUAL_ANAK_ID, nama: "Anak" };
-    } else {
-      first = baseKats[0];
-    }
-    if (first) {
-      setKategoriId(first.id);
-      setUmur(first.autoAge ? first.min : null);
-    } else {
-      setKategoriId("");
-      setUmur(null);
-    }
+    // Don't manually setKategoriId/setUmur here — the useEffect above
+    // derives them from eligibleKats. This avoids race conditions
+    // where this function's updates would be overwritten by the
+    // useEffect on the next render.
   }
 
   function selectKategori(id: string) {
