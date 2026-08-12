@@ -11,8 +11,6 @@ pg.types.setTypeParser(23, (v) => (v === null ? null : Number(v)));
 
 const pool = new pg.Pool({ connectionString: url, ssl: { rejectUnauthorized: false }, max: 1 });
 
-const NEW_HASH = "sha256$98ee4aaf40c2305c396acd301b858dcddd067552f4ffd1d080825c3f0d4b1e11";
-
-const r = await pool.query("UPDATE settings SET admin_password_hash = $1 RETURNING admin_password_hash", [NEW_HASH]);
-console.log("Updated hash:", r.rows[0].admin_password_hash);
+const r = await pool.query("SELECT id, nama, min, max, auto_age, input_mode FROM kategori ORDER BY urutan");
+console.table(r.rows);
 await pool.end();

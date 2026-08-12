@@ -11,8 +11,14 @@ pg.types.setTypeParser(23, (v) => (v === null ? null : Number(v)));
 
 const pool = new pg.Pool({ connectionString: url, ssl: { rejectUnauthorized: false }, max: 1 });
 
-const NEW_HASH = "sha256$98ee4aaf40c2305c396acd301b858dcddd067552f4ffd1d080825c3f0d4b1e11";
-
-const r = await pool.query("UPDATE settings SET admin_password_hash = $1 RETURNING admin_password_hash", [NEW_HASH]);
-console.log("Updated hash:", r.rows[0].admin_password_hash);
+const r = await pool.query(`
+  SELECT l.id, l.nama, l.status, l.pendaftaran_dibuka, l.kategori_eligible
+  FROM lomba l
+  WHERE l.kategori_eligible::text LIKE '%k_dewasa_p%' OR l.kategori_eligible::text LIKE '%k_umum%'
+  ORDER BY l.id
+`);
+console.log("Lomba yang punya Ibu-Ibu atau Umum:");
+for (const row of r.rows) {
+  console.log(`  id=${row.id} ${row.nama} status=${row.status} buka=${row.pendaftaran_dibuka} eligible=${JSON.stringify(row.kategori_eligible)}`);
+}
 await pool.end();

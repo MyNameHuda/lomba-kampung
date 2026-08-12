@@ -43,6 +43,7 @@ export default defineEventHandler(async (event) => {
     })),
     kats: kats.map((k) => ({
       id: k.id, nama: k.nama, min: k.min, max: k.max, autoAge: k.autoAge,
+      inputMode: k.inputMode,
       urutan: k.urutan, icon: k.icon,
       colorBg: k.colorBg, colorText: k.colorText, colorBorder: k.colorBorder,
     })),

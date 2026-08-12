@@ -175,6 +175,22 @@ const eligibleKats = computed(() => {
 
 const selectedKat = computed(() => eligibleKats.value.find((k: any) => k.id === kategoriId.value) || null);
 const skipUmur = computed(() => selectedKat.value?.autoAge ?? false);
+// Field mode = render number input instead of chip grid. Used when kategori
+// range is wide (e.g. Umum 0-99, Ibu-Ibu 18-99) and a chip grid would
+// render 80-100+ buttons. Admin sets this per-kategori in /admin/pengaturan.
+const useFieldInput = computed(
+  () => !skipUmur.value && selectedKat.value?.inputMode === "field"
+);
+// Field-mode range validation
+const umurError = computed(() => {
+  if (skipUmur.value || !selectedKat.value || umur.value === null) return "";
+  if (useFieldInput.value) {
+    if (umur.value < selectedKat.value.min) return `Minimal ${selectedKat.value.min} tahun`;
+    if (selectedKat.value.max < 999 && umur.value > selectedKat.value.max) return `Maksimal ${selectedKat.value.max} tahun`;
+  }
+  return "";
+});
+const ageFieldRef = ref<HTMLInputElement | null>(null);
 
 // When lombaId changes, seed sub-kategori + umur and refresh the local
 // peserta list in one place. Two side-effects, one watcher — keeps the
@@ -284,7 +300,7 @@ const sortedPeserta = computed(() => {
 
 async function submit(e: Event) {
   e.preventDefault();
-  if (!nama.value.trim() || !lombaId.value || !kategoriId.value || (!skipUmur.value && !umur.value)) {
+  if (!nama.value.trim() || !lombaId.value || !kategoriId.value || (!skipUmur.value && !umur.value) || umurError.value) {
     notify.warning("Semua field wajib diisi");
     return;
   }
@@ -734,25 +750,51 @@ async function runCopy() {
                   Umur <span class="text-primary">*</span>
                 </span>
               </label>
-              <div v-if="selectedKat" class="text-[11px] text-[#6B7280] mb-1.5">
-                Pilih umur ({{ eligibleAges.length }} opsi · {{ selectedKat.min }}–{{ selectedKat.max }} tahun)
+              <!-- Field mode (admin set inputMode="field"): number input.
+                   Used when range is wide (e.g. Umum 0-99, Ibu-Ibu 18-99)
+                   and a chip grid would render 80-100+ buttons. -->
+              <div v-if="useFieldInput">
+                <input
+                  ref="ageFieldRef"
+                  v-model.number="umur"
+                  type="number"
+                  inputmode="numeric"
+                  :min="selectedKat?.min"
+                  :max="selectedKat?.max < 999 ? selectedKat?.max : undefined"
+                  :placeholder="`${selectedKat?.min}–${selectedKat?.max < 999 ? selectedKat?.max : '∞'} tahun`"
+                  :aria-invalid="!!umurError"
+                  class="input text-center text-lg font-bold"
+                  :class="umurError ? 'input-error' : ''"
+                />
+                <div v-if="umurError" class="field-hint is-error mt-1.5">
+                  <i class="fas fa-exclamation-triangle" /> {{ umurError }}
+                </div>
+                <div v-else-if="selectedKat" class="text-[11px] text-[#6B7280] text-center mt-2">
+                  Rentang <strong>{{ selectedKat.min }}</strong>–<strong>{{ selectedKat.max < 999 ? selectedKat.max : 'tanpa batas' }}</strong> tahun untuk <strong>{{ selectedKat.nama }}</strong>
+                </div>
               </div>
-              <div v-if="selectedKat" class="grid grid-cols-5 sm:grid-cols-7 gap-1.5">
-                <button
-                  v-for="a in eligibleAges"
-                  :key="a"
-                  type="button"
-                  :class="[
-                    'h-11 rounded-lg border-2 flex items-center justify-center font-bold text-base transition-all active:scale-95',
-                    umur === a
-                      ? 'bg-primary border-primary text-white shadow-md'
-                      : 'bg-white border-[#E5E7EB] text-[#1F2937] hover:border-primary hover:bg-primary-light'
-                  ]"
-                  @click="umur = a"
-                >
-                  {{ a }}
-                </button>
-              </div>
+              <!-- Button mode (default): chip grid -->
+              <template v-else>
+                <div v-if="selectedKat" class="text-[11px] text-[#6B7280] mb-1.5">
+                  Pilih umur ({{ eligibleAges.length }} opsi · {{ selectedKat.min }}–{{ selectedKat.max }} tahun)
+                </div>
+                <div v-if="selectedKat" class="grid grid-cols-5 sm:grid-cols-7 gap-1.5">
+                  <button
+                    v-for="a in eligibleAges"
+                    :key="a"
+                    type="button"
+                    :class="[
+                      'h-11 rounded-lg border-2 flex items-center justify-center font-bold text-base transition-all active:scale-95',
+                      umur === a
+                        ? 'bg-primary border-primary text-white shadow-md'
+                        : 'bg-white border-[#E5E7EB] text-[#1F2937] hover:border-primary hover:bg-primary-light'
+                    ]"
+                    @click="umur = a"
+                  >
+                    {{ a }}
+                  </button>
+                </div>
+              </template>
             </div>
             <div v-else-if="selectedKat" class="bg-[#FCE0E0] border border-[#FBE0E0] rounded-lg p-2.5 flex items-start gap-2">
               <i class="fas fa-circle-info text-[#9D1010] mt-0.5 text-[12px]" />
