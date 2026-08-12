@@ -45,6 +45,23 @@ export async function getAdminSession(event: H3Event) {
   });
 }
 
+// Passive admin check — just looks for the presence of a session cookie
+// without calling useSession. The actual auth is still enforced on every
+// /admin/* endpoint via requireAuth(). This exists so that public endpoints
+// (e.g. /api/public/home) can return an isAdmin hint WITHOUT forcing a
+// Set-Cookie response (which would defeat Vercel edge cache).
+//
+// Returns true if a session cookie is present in the request. This is a HINT
+// for the UI (show/hide Admin button), NOT an auth decision. The actual
+// permission check on /api/admin/* still calls getAdminSession which
+// verifies the signed cookie. A user crafting a fake cookie would see the
+// Admin button but be rejected on every protected endpoint.
+export function hasSessionCookie(event: H3Event): boolean {
+  const cookieHeader = event.node.req.headers.cookie;
+  if (!cookieHeader) return false;
+  return cookieHeader.includes(`${SESSION_COOKIE_NAME}=`);
+}
+
 export async function isAuthenticated(event: H3Event): Promise<boolean> {
   const session = await getAdminSession(event);
   return !!session.data.isAdmin;

@@ -1,6 +1,6 @@
 // GET /api/public/home — data needed by the public home page (lomba list + kategori + settings + admin status).
 import { defineEventHandler, setResponseHeader } from "h3";
-import { isAuthenticated } from "~~/server/utils/auth";
+import { hasSessionCookie } from "~~/server/utils/auth";
 import { getLomba } from "~~/server/utils/db/lomba";
 import { getKategori } from "~~/server/utils/db/kategori";
 import { getSettings } from "~~/server/utils/db/settings";
@@ -9,15 +9,20 @@ import { countPendaftarByLombaBatch } from "~~/server/utils/db/pendaftar";
 // Vercel edge cache (s-maxage 30s, serve stale up to 1 day). The / page wraps
 // this in SSR swr but the JSON API is hit directly by the client on hydration
 // and re-fetched on every navigation, so caching it is the bigger win.
+//
+// Uses hasSessionCookie() instead of isAuthenticated() to AVOID calling
+// h3's useSession — useSession always sets a Set-Cookie response header,
+// which causes Vercel to skip edge cache (cookies are user-specific).
+// hasSessionCookie is a passive boolean check on the request cookie header.
 export default defineEventHandler(async (event) => {
   setResponseHeader(event, "Cache-Control", "public, s-maxage=30, stale-while-revalidate=86400");
-  // Parallel: 3 lightweight reads + auth check.
-  const [rows, kats, cfg, isAdmin] = await Promise.all([
+  // Parallel: 3 lightweight reads + passive auth hint (no DB, no cookie refresh).
+  const [rows, kats, cfg] = await Promise.all([
     getLomba(true),
     getKategori(),
     getSettings(),
-    isAuthenticated(event),
   ]);
+  const isAdmin = hasSessionCookie(event);
 
   // Single batched COUNT(*) for ALL lomba — replaces the previous N+1 pattern
   // that issued 21 separate queries (one per lomba). At pg.Pool max=1, those
