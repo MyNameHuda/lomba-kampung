@@ -4,9 +4,10 @@ import { isAuthenticated } from "~~/server/utils/auth";
 import { getLomba } from "~~/server/utils/db/lomba";
 import { getKategori } from "~~/server/utils/db/kategori";
 import { getSettings } from "~~/server/utils/db/settings";
-import { countPendaftarByLomba } from "~~/server/utils/db/pendaftar";
+import { countPendaftarByLombaBatch } from "~~/server/utils/db/pendaftar";
 
 export default defineEventHandler(async (event) => {
+  // Parallel: 3 lightweight reads + auth check.
   const [rows, kats, cfg, isAdmin] = await Promise.all([
     getLomba(true),
     getKategori(),
@@ -14,8 +15,13 @@ export default defineEventHandler(async (event) => {
     isAuthenticated(event),
   ]);
 
-  const countsArr = await Promise.all(rows.map((l) => countPendaftarByLomba(l.id, "disetujui")));
-  const countByLomba = new Map(countsArr.map((c, i) => [rows[i].id, c]));
+  // Single batched COUNT(*) for ALL lomba — replaces the previous N+1 pattern
+  // that issued 21 separate queries (one per lomba). At pg.Pool max=1, those
+  // serialized to ~10s of pure DB roundtrip on Vercel. Now: 1 query, ~50-200ms.
+  const countByLomba = await countPendaftarByLombaBatch(
+    rows.map((l) => l.id),
+    "disetujui"
+  );
 
   const lomba = rows.map((l) => ({
     id: l.id,
