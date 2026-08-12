@@ -50,6 +50,7 @@ export default defineEventHandler(async (event) => {
       min: k.min,
       max: k.max,
       autoAge: k.autoAge,
+      inputMode: k.inputMode,
     })),
   };
 });
