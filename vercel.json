@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/health/keep-warm",
-      "schedule": "0 * * * *"
+      "schedule": "0 7,19 * * *"
     }
   ]
 }
