@@ -1,0 +1,35 @@
+# Nuxt
+.nuxt
+.nitro
+.output
+.data
+.cache
+dist
+
+# Stale build artifacts & old node_modules (50MB+ bloat)
+.archive/
+
+# Node
+node_modules
+*.log
+.npm
+.eslintcache
+.cache
+
+# Local DB (dev only — production uses Neon Postgres)
+lomba.db
+lomba.db-journal
+lomba.db-wal
+lomba.db-shm
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Misc
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+*.tsbuildinfo

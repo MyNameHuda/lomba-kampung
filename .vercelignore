@@ -1,0 +1,51 @@
+# Vercel deploy — exclude everything that bloats the upload but isn't needed at build time.
+# Source: https://vercel.com/docs/concepts/deployments/ignoring-local-files
+
+# Stale build artifacts & old node_modules (biggest bloat source — ~50MB+ from
+# exceljs, fast-csv, jszip, archiver, unzipper, fstream dumped from previous builds)
+.archive/
+
+# Old migration/cleanup scripts kept for reference, not used in current deploy
+scripts/.archive/
+
+# Dev-only diagnostic dumps (one-off debug output)
+.diag/
+
+# Local data dumps / SQL snapshots used during development
+data/
+
+# Documentation — not needed at runtime
+docs/
+README.md
+DEPLOY_VERCEL.md
+
+# Test / smoke scripts — not bundled into app, not used by Vercel build
+scripts/test-neon.mts
+
+# Env templates (only .env* is loaded by Vercel from project settings, not git)
+.env
+.env.local
+.env.*.local
+.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local SQLite artifacts (in case any sneak back in)
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+# TypeScript build info
+*.tsbuildinfo
