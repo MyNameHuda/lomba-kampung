@@ -214,16 +214,28 @@ export async function countPendaftarByLombaBatch(
 ): Promise<Map<number, number>> {
   const map = new Map<number, number>();
   if (lombaIds.length === 0) return map;
-  const idsParam = [lombaIds]; // double-wrap for pg array binding
-  const rows = status
-    ? await all<{ lomba_id: number; c: number }>(
-        "SELECT lomba_id, COUNT(*) as c FROM pendaftar WHERE lomba_id = ANY($1) AND status = $2 GROUP BY lomba_id",
-        [idsParam, status]
-      )
-    : await all<{ lomba_id: number; c: number }>(
-        "SELECT lomba_id, COUNT(*) as c FROM pendaftar WHERE lomba_id = ANY($1) AND status != 'ditolak' GROUP BY lomba_id",
-        [idsParam]
-      );
+  // Build the SQL string + params based on whether `status` is provided.
+  // Two separate strings (NOT a ternary on `all()`) so the bundler can't
+  // collapse branches — the v1 bundler once dropped the 1-param branch and
+  // shipped a query that expected 2 params when called with 1.
+  const idsParam = [lombaIds];
+  let rows: Array<{ lomba_id: number; c: number }>;
+  if (status) {
+    // Spread the args so each is a separate pg parameter ($1, $2).
+    // DO NOT pass `[idsParam, status]` as a single array — that would bind
+    // $1 = [idsParam, status] and leave $2 unbound (causing "bind message
+    // supplies 1 parameters, but prepared statement requires 2").
+    rows = await all<{ lomba_id: number; c: number }>(
+      "SELECT lomba_id, COUNT(*) as c FROM pendaftar WHERE lomba_id = ANY($1) AND status = $2 GROUP BY lomba_id",
+      idsParam,
+      status
+    );
+  } else {
+    rows = await all<{ lomba_id: number; c: number }>(
+      "SELECT lomba_id, COUNT(*) as c FROM pendaftar WHERE lomba_id = ANY($1) AND status != 'ditolak' GROUP BY lomba_id",
+      idsParam
+    );
+  }
   for (const r of rows) {
     map.set(Number(r.lomba_id), Number(r.c));
   }
