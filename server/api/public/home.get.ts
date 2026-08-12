@@ -1,12 +1,16 @@
 // GET /api/public/home — data needed by the public home page (lomba list + kategori + settings + admin status).
-import { defineEventHandler } from "h3";
+import { defineEventHandler, setResponseHeader } from "h3";
 import { isAuthenticated } from "~~/server/utils/auth";
 import { getLomba } from "~~/server/utils/db/lomba";
 import { getKategori } from "~~/server/utils/db/kategori";
 import { getSettings } from "~~/server/utils/db/settings";
 import { countPendaftarByLombaBatch } from "~~/server/utils/db/pendaftar";
 
+// Vercel edge cache (s-maxage 30s, serve stale up to 1 day). The / page wraps
+// this in SSR swr but the JSON API is hit directly by the client on hydration
+// and re-fetched on every navigation, so caching it is the bigger win.
 export default defineEventHandler(async (event) => {
+  setResponseHeader(event, "Cache-Control", "public, s-maxage=30, stale-while-revalidate=86400");
   // Parallel: 3 lightweight reads + auth check.
   const [rows, kats, cfg, isAdmin] = await Promise.all([
     getLomba(true),

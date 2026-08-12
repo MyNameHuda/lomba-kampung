@@ -1,9 +1,11 @@
 // GET /api/public/lomba/[id]/daftar-info — minimal info needed by the daftar form
-import { defineEventHandler, getRouterParam, createError } from "h3";
+import { defineEventHandler, getRouterParam, createError, setResponseHeader } from "h3";
 import { getLombaById } from "~~/server/utils/db/lomba";
 import { getKategori } from "~~/server/utils/db/kategori";
 
+// 30s edge cache. Form data is read-mostly; safe to cache.
 export default defineEventHandler(async (event) => {
+  setResponseHeader(event, "Cache-Control", "public, s-maxage=30, stale-while-revalidate=86400");
   const id = Number(getRouterParam(event, "id"));
   if (!Number.isFinite(id) || id <= 0) {
     throw createError({ statusCode: 400, statusMessage: "id tidak valid" });

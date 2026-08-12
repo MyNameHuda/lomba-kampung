@@ -1,10 +1,13 @@
 // GET /api/public/lomba/[id] — full data for public lomba detail page
-import { defineEventHandler, getRouterParam, createError } from "h3";
+import { defineEventHandler, getRouterParam, createError, setResponseHeader } from "h3";
 import { getLombaById, getJuaraReadinessFromLomba } from "~~/server/utils/db/lomba";
 import { getKategori } from "~~/server/utils/db/kategori";
 import { groupPendaftarForLomba, getJuaraByLomba, getPendaftarByLomba } from "~~/server/utils/db/pendaftar";
 
+// Vercel edge cache — 30s fresh, serve stale up to 1 day. Per-lomba data
+// (pj, peserta groups, juara) is read-mostly; safe to cache.
 export default defineEventHandler(async (event) => {
+  setResponseHeader(event, "Cache-Control", "public, s-maxage=30, stale-while-revalidate=86400");
   const id = Number(getRouterParam(event, "id"));
   if (!Number.isFinite(id) || id <= 0) {
     throw createError({ statusCode: 400, statusMessage: "id tidak valid" });

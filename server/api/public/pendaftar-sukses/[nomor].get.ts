@@ -1,11 +1,14 @@
 // GET /api/public/pendaftar-sukses/[nomor] — data for the success page
-import { defineEventHandler, getRouterParam, createError } from "h3";
+import { defineEventHandler, getRouterParam, createError, setResponseHeader } from "h3";
 import { getPendaftarByNomor } from "~~/server/utils/db/pendaftar";
 import { getLombaById } from "~~/server/utils/db/lomba";
 import { getKategori } from "~~/server/utils/db/kategori";
 import { getSettings } from "~~/server/utils/db/settings";
 
+// Per-nomor cache (60s fresh, 1 day stale). User revisits the success page
+// within a minute after registering; this makes that second visit instant.
 export default defineEventHandler(async (event) => {
+  setResponseHeader(event, "Cache-Control", "public, s-maxage=60, stale-while-revalidate=86400");
   const nomor = getRouterParam(event, "nomor");
   if (!nomor) {
     throw createError({ statusCode: 400, statusMessage: "nomor wajib diisi" });
