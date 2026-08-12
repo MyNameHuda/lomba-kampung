@@ -6,6 +6,7 @@ import AdminShell from "~/components/AdminShell.vue";
 import { useNotify } from "~/composables/useNotify";
 import { getInitials } from "~/utils/format";
 import { SUMBER as SUMBER_CONST } from "~/utils/constants";
+import html2canvas from "html2canvas";
 
 useHead({ title: "Input Manual — Admin" });
 
@@ -248,6 +249,69 @@ function selectKategori(id: string) {
   const k = eligibleKats.value.find((x: any) => x.id === id);
   if (k) umur.value = k.autoAge ? k.min : null;
   else umur.value = null;
+}
+
+// =================== Export Image ===================
+// Capture the current peserta list (respecting active filter + sort) as a PNG
+// download. Same pattern as juara.vue: render a hidden printable card, capture
+// with html2canvas, trigger download. No new page navigation.
+const isExporting = ref(false);
+const hiddenPrint = ref<HTMLElement | null>(null);
+const hiddenPrintData = ref<{
+  lombaNama: string;
+  lombaEmoji: string;
+  peserta: any[];
+  filterLabel: string;
+  totalPeserta: number;
+  tanggalCetak: string;
+} | null>(null);
+
+const tanggalCetakStr = computed(() =>
+  new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date())
+);
+
+async function exportImage() {
+  if (sortedPeserta.value.length === 0) {
+    notify.warning("Tidak ada peserta untuk di-export");
+    return;
+  }
+  isExporting.value = true;
+  try {
+    const currentLomba = lombaList.value.find((l: any) => l.id === lombaId.value);
+    hiddenPrintData.value = {
+      lombaNama: currentLomba?.nama || "",
+      lombaEmoji: currentLomba?.emoji || "",
+      peserta: sortedPeserta.value,
+      filterLabel: filterLabel.value || "Semua peserta",
+      totalPeserta: sortedPeserta.value.length,
+      tanggalCetak: tanggalCetakStr.value,
+    };
+    await nextTick();
+    if (!hiddenPrint.value) throw new Error("Print area not ready");
+    const canvas = await html2canvas(hiddenPrint.value, {
+      backgroundColor: "#FFFFFF",
+      scale: 2,
+      useCORS: true,
+      logging: false,
+    });
+    const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("Gagal render canvas");
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const safeNama = (currentLomba?.nama || "lomba").replace(/[^a-zA-Z0-9-_]+/g, "-");
+    a.href = url;
+    a.download = `peserta-${safeNama}-${new Date().toISOString().slice(0, 10)}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    notify.success("Gambar berhasil di-download");
+  } catch (e: any) {
+    notify.error(e?.message || "Gagal download gambar");
+  } finally {
+    hiddenPrintData.value = null;
+    isExporting.value = false;
+  }
 }
 
 // Age chips for the selected sub-kategori (e.g. 5..11 → [5,6,7,8,9,10,11])
@@ -866,6 +930,17 @@ async function runCopy() {
                 ({{ sortedPeserta.length }}<template v-if="filterLabel && sortedPeserta.length !== pesertaList.length">/{{ pesertaList.length }}</template>)
               </span>
             </h3>
+            <button
+              type="button"
+              :class="['px-2.5 py-1 text-[11px] font-semibold border border-[#E5E7EB] rounded inline-flex items-center gap-1 transition-colors', isExporting ? 'bg-[#F3F4F6] text-[#9CA3AF]' : 'bg-white text-[#374151] hover:bg-[#F9FAFB] hover:border-primary hover:text-primary']"
+              :disabled="isExporting || sortedPeserta.length === 0"
+              :title="sortedPeserta.length === 0 ? 'Tidak ada peserta untuk di-export' : 'Download gambar daftar peserta'"
+              aria-label="Download gambar daftar peserta"
+              @click="exportImage"
+            >
+              <i :class="['fas', isExporting ? 'fa-spinner fa-spin' : 'fa-image']" />
+              {{ isExporting ? "Render..." : "Image" }}
+            </button>
             <div class="flex border border-[#E5E7EB] rounded overflow-hidden">
               <button :class="['px-2.5 py-1 text-[11px] font-semibold', sortMode === 'nama' ? 'bg-primary text-white' : 'bg-white text-[#6B7280]']" @click="sortMode = 'nama'">A-Z</button>
               <button :class="['px-2.5 py-1 text-[11px] font-semibold', sortMode === 'umur' ? 'bg-primary text-white' : 'bg-white text-[#6B7280]']" @click="sortMode = 'umur'">Umur</button>
@@ -1017,5 +1092,98 @@ async function runCopy() {
       </div>
     </Teleport>
   </AdminShell>
+
+  <!-- Hidden printable area — only rendered while user clicks "Image" to capture as PNG.
+       Lives off-screen so it doesn't affect the page layout. -->
+  <div
+    v-if="hiddenPrintData"
+    aria-hidden="true"
+    style="position: fixed; left: -10000px; top: 0; pointer-events: none;"
+  >
+    <div ref="hiddenPrint" class="im-print-card">
+      <div class="im-print-header">
+        <span class="im-print-emoji">{{ hiddenPrintData.lombaEmoji }}</span>
+        <h1 class="im-print-title">{{ hiddenPrintData.lombaNama }}</h1>
+      </div>
+      <div class="im-print-body">
+        <p class="im-print-meta">
+          <strong>{{ hiddenPrintData.totalPeserta }} peserta</strong> · {{ hiddenPrintData.filterLabel }} · Dicetak {{ hiddenPrintData.tanggalCetak }}
+        </p>
+        <table class="im-print-table">
+          <thead>
+            <tr>
+              <th class="im-print-th-no">No</th>
+              <th class="im-print-th-nama">Nama</th>
+              <th class="im-print-th-jk">JK</th>
+              <th class="im-print-th-umur">Umur</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(p, i) in hiddenPrintData.peserta" :key="p.id">
+              <td class="im-print-td-no">{{ i + 1 }}</td>
+              <td class="im-print-td-nama">{{ p.nama }}</td>
+              <td class="im-print-td-jk">{{ p.jenisKelamin }}</td>
+              <td class="im-print-td-umur">{{ p.umur }} th</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="im-print-footer">Daftar Peserta · {{ hiddenPrintData.lombaNama }}</p>
+      </div>
+    </div>
+  </div>
 </template>
+
+<style>
+/* Off-screen printable card for the input-manual image export. Same approach
+   as juara.vue + peserta/[lombaId].vue: hidden off-screen, html2canvas captures
+   the rendered DOM, blob → download. */
+.im-print-card {
+  background: #FFFFFF;
+  border: 1px solid #F3F4F6;
+  border-radius: 8px;
+  padding: 24px;
+  width: 640px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #1F2937;
+}
+.im-print-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #E5E7EB;
+  margin-bottom: 16px;
+}
+.im-print-emoji { font-size: 36px; line-height: 1; }
+.im-print-title { font-size: 22px; font-weight: 700; margin: 0; color: #1F2937; }
+.im-print-body { font-size: 13px; }
+.im-print-meta { font-size: 12px; color: #6B7280; margin: 0 0 16px; }
+.im-print-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.im-print-table thead { background: #F9FAFB; }
+.im-print-th-no,
+.im-print-th-jk,
+.im-print-th-umur {
+  padding: 8px 6px;
+  text-align: left;
+  font-weight: 600;
+  color: #6B7280;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid #E5E7EB;
+}
+.im-print-th-nama { padding: 8px 6px; text-align: left; font-weight: 600; color: #6B7280; font-size: 10px; text-transform: uppercase; border-bottom: 1px solid #E5E7EB; }
+.im-print-td-no { padding: 8px 6px; border-bottom: 1px solid #F3F4F6; color: #6B7280; width: 40px; }
+.im-print-td-jk { padding: 8px 6px; border-bottom: 1px solid #F3F4F6; color: #374151; font-weight: 600; width: 40px; }
+.im-print-td-umur { padding: 8px 6px; border-bottom: 1px solid #F3F4F6; color: #374151; width: 70px; }
+.im-print-td-nama { padding: 8px 6px; border-bottom: 1px solid #F3F4F6; font-weight: 600; color: #1F2937; }
+.im-print-footer {
+  margin: 20px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid #E5E7EB;
+  font-size: 11px;
+  color: #9CA3AF;
+  text-align: center;
+}
+</style>
 

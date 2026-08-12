@@ -4,6 +4,7 @@ import AdminShell from "~/components/AdminShell.vue";
 import DownloadExcelButton from "~/components/DownloadExcelButton.vue";
 import { useNotify } from "~/composables/useNotify";
 import { groupKategoriByPublicName } from "~/utils/format";
+import html2canvas from "html2canvas";
 
 type PesertaRow = {
   id: number;
@@ -119,6 +120,77 @@ function resetFilters() {
   genderFilter.value = "all";
   statusFilter.value = "all";
 }
+
+// =================== Export Image ===================
+// Capture the current peserta list (respecting active filters + sort) as a PNG
+// download. Same pattern as juara.vue: render a hidden printable card, capture
+// with html2canvas, trigger download. No new page navigation.
+const isExporting = ref(false);
+const hiddenPrint = ref<HTMLElement | null>(null);
+const hiddenPrintData = ref<{
+  lombaNama: string;
+  lombaEmoji: string;
+  sections: Array<{ publicName: string; peserta: PesertaRow[] }>;
+  filterLabel: string;
+  totalPeserta: number;
+  tanggalCetak: string;
+} | null>(null);
+
+const tanggalCetakStr = computed(() =>
+  new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date())
+);
+
+async function exportImage() {
+  if (filteredSections.value.length === 0) {
+    notify.warning("Tidak ada peserta untuk di-export");
+    return;
+  }
+  isExporting.value = true;
+  try {
+    hiddenPrintData.value = {
+      lombaNama: data.value?.lomba?.nama || "",
+      lombaEmoji: data.value?.lomba?.emoji || "",
+      sections: filteredSections.value.map((s) => ({ publicName: s.publicName, peserta: s.peserta })),
+      filterLabel: filterLabelStr.value,
+      totalPeserta: filteredCount.value,
+      tanggalCetak: tanggalCetakStr.value,
+    };
+    await nextTick();
+    if (!hiddenPrint.value) throw new Error("Print area not ready");
+    const canvas = await html2canvas(hiddenPrint.value, {
+      backgroundColor: "#FFFFFF",
+      scale: 2,
+      useCORS: true,
+      logging: false,
+    });
+    const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("Gagal render canvas");
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const safeNama = (data.value?.lomba?.nama || "lomba").replace(/[^a-zA-Z0-9-_]+/g, "-");
+    a.href = url;
+    a.download = `peserta-${safeNama}-${new Date().toISOString().slice(0, 10)}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    notify.success("Gambar berhasil di-download");
+  } catch (e: any) {
+    notify.error(e?.message || "Gagal download gambar");
+  } finally {
+    hiddenPrintData.value = null;
+    isExporting.value = false;
+  }
+}
+
+// Human-readable filter description for the export header.
+const filterLabelStr = computed(() => {
+  const parts: string[] = [];
+  if (search.value.trim()) parts.push(`cari "${search.value.trim()}"`);
+  if (statusFilter.value !== "all") parts.push(statusFilter.value === "hadir" ? "hadir" : "absen");
+  if (genderFilter.value !== "all") parts.push(genderFilter.value === "L" ? "laki-laki" : "perempuan");
+  return parts.length > 0 ? parts.join(" · ") : "Semua peserta";
+});
 </script>
 
 <template>
@@ -128,6 +200,18 @@ function resetFilters() {
     active-nav="/admin/peserta"
   >
     <template #actions>
+      <button
+        type="button"
+        class="btn btn-sm btn-secondary"
+        style="width: auto"
+        :disabled="isExporting || filteredSections.length === 0"
+        :title="filteredSections.length === 0 ? 'Tidak ada peserta untuk di-export' : 'Download gambar daftar peserta'"
+        aria-label="Download gambar daftar peserta"
+        @click="exportImage"
+      >
+        <i :class="['fas', isExporting ? 'fa-spinner fa-spin' : 'fa-image']" />
+        {{ isExporting ? "Render..." : "Image" }}
+      </button>
       <DownloadExcelButton
         variant="btn-secondary"
         label="Excel"
@@ -355,4 +439,149 @@ function resetFilters() {
       </div>
     </div>
   </AdminShell>
+
+  <!-- Hidden printable area — only rendered while user clicks "Image" to capture as PNG.
+       Lives off-screen so it doesn't affect the page layout. -->
+  <div
+    v-if="hiddenPrintData"
+    aria-hidden="true"
+    style="position: fixed; left: -10000px; top: 0; pointer-events: none;"
+  >
+    <div ref="hiddenPrint" class="peserta-print-card">
+      <div class="peserta-print-header">
+        <span class="peserta-print-emoji">{{ hiddenPrintData.lombaEmoji }}</span>
+        <h1 class="peserta-print-title">{{ hiddenPrintData.lombaNama }}</h1>
+      </div>
+      <div class="peserta-print-body">
+        <p class="peserta-print-meta">
+          <strong>{{ hiddenPrintData.totalPeserta }} peserta</strong> · {{ hiddenPrintData.filterLabel }} · Dicetak {{ hiddenPrintData.tanggalCetak }}
+        </p>
+        <div v-for="(s, idx) in hiddenPrintData.sections" :key="idx" class="peserta-print-section">
+          <h2 class="peserta-print-section-title">{{ s.publicName }} <span class="peserta-print-section-count">{{ s.peserta.length }} orang</span></h2>
+          <table class="peserta-print-table">
+            <thead>
+              <tr>
+                <th class="peserta-print-th-no">No</th>
+                <th class="peserta-print-th-nama">Nama</th>
+                <th class="peserta-print-th-jk">JK</th>
+                <th class="peserta-print-th-umur">Umur</th>
+                <th class="peserta-print-th-status">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(p, i) in s.peserta" :key="p.id">
+                <td class="peserta-print-td-no">{{ i + 1 }}</td>
+                <td class="peserta-print-td-nama">{{ p.nama }}</td>
+                <td class="peserta-print-td-jk">{{ p.jenisKelamin }}</td>
+                <td class="peserta-print-td-umur">{{ p.umur }} th</td>
+                <td class="peserta-print-td-status">{{ p.hadir ? "Hadir" : "Absen" }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="peserta-print-footer">Daftar Peserta · {{ hiddenPrintData.lombaNama }}</p>
+      </div>
+    </div>
+  </div>
 </template>
+
+<style>
+/* Off-screen printable card. Same approach as juara.vue. Inline-styled via
+   class names so html2canvas can resolve the computed styles. */
+.peserta-print-card {
+  background: #FFFFFF;
+  border: 1px solid #F3F4F6;
+  border-radius: 8px;
+  padding: 24px;
+  width: 720px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #1F2937;
+}
+.peserta-print-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #E5E7EB;
+  margin-bottom: 16px;
+}
+.peserta-print-emoji {
+  font-size: 36px;
+  line-height: 1;
+}
+.peserta-print-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+  color: #1F2937;
+}
+.peserta-print-body { font-size: 13px; }
+.peserta-print-meta {
+  font-size: 12px;
+  color: #6B7280;
+  margin: 0 0 16px;
+}
+.peserta-print-section { margin-bottom: 20px; }
+.peserta-print-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #1F2937;
+  margin: 0 0 8px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.peserta-print-section-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6B7280;
+  background: #F3F4F6;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: none;
+}
+.peserta-print-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.peserta-print-table thead {
+  background: #F9FAFB;
+}
+.peserta-print-th-no,
+.peserta-print-th-jk,
+.peserta-print-th-umur,
+.peserta-print-th-status {
+  padding: 8px 6px;
+  text-align: left;
+  font-weight: 600;
+  color: #6B7280;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid #E5E7EB;
+}
+.peserta-print-th-nama { padding: 8px 6px; text-align: left; font-weight: 600; color: #6B7280; font-size: 10px; text-transform: uppercase; border-bottom: 1px solid #E5E7EB; }
+.peserta-print-td-no,
+.peserta-print-td-jk,
+.peserta-print-td-umur,
+.peserta-print-td-status {
+  padding: 8px 6px;
+  border-bottom: 1px solid #F3F4F6;
+  color: #374151;
+}
+.peserta-print-td-no { width: 40px; color: #6B7280; }
+.peserta-print-td-jk { width: 40px; font-weight: 600; }
+.peserta-print-td-umur { width: 70px; }
+.peserta-print-td-status { width: 80px; }
+.peserta-print-td-nama { padding: 8px 6px; border-bottom: 1px solid #F3F4F6; font-weight: 600; color: #1F2937; }
+.peserta-print-footer {
+  margin: 20px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid #E5E7EB;
+  font-size: 11px;
+  color: #9CA3AF;
+  text-align: center;
+}
+</style>
