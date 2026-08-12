@@ -85,6 +85,21 @@ export default defineNuxtConfig({
   // env var.
   nitro: { preset: "vercel" },
 
+  // Route rules — add stale-while-revalidate caching to public pages so
+  // Vercel serves cached HTML for ~60s while regenerating in the background.
+  // Without this, every page load pays the full SSR cost (Vercel serverless
+  // cold start + 4 DB queries), which on free-tier Neon + Vercel can be
+  // 8-15s on a cold function. With swr, repeated visitors get <500ms responses
+  // while the cache is warm. The home page data (lomba list) is cache-safe —
+  // updates land within 60s of admin changes.
+  //
+  // The /api/public/* paths are intentionally NOT cached because the admin UI
+  // re-fetches them on every interaction and the cached HTML would be stale.
+  routeRules: {
+    "/": { swr: 60 },
+    "/lomba/**": { swr: 30 },
+  },
+
   // TypeScript strict mode (matches Next TS config)
   typescript: {
     strict: true,
