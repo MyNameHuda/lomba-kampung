@@ -49,14 +49,25 @@ export async function columnExists(table: string, column: string): Promise<boole
 }
 
 // Idempotent ADD COLUMN. Uses ADD COLUMN IF NOT EXISTS (Postgres 9.6+).
+//
+// Memoized: repeated calls for the same (table, column) are a no-op in JS
+// after the first successful call. This matters because callers like
+// getLombaById() invoke 3-4 ensure*Column() helpers on every request, each
+// of which was issuing real ALTER TABLE round-trips. With the cache, only
+// the first invocation in a process pays the cost; subsequent ones are O(1).
+// On Vercel serverless warm invocations this is essentially free.
+const ensuredColumns = new Set<string>();
 export async function ensureColumn(
   table: string,
   column: string,
   definition: string
 ): Promise<void> {
+  const key = `${table}.${column}`;
+  if (ensuredColumns.has(key)) return;
   await run(
     `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} ${definition}`
   );
+  ensuredColumns.add(key);
 }
 
 // DbValue is exported from client.ts; do NOT re-export here or Nuxt

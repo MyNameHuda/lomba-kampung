@@ -4,27 +4,22 @@
 import { defineEventHandler } from "h3";
 import { requireAuth } from "~~/server/utils/auth";
 import { getLomba } from "~~/server/utils/db/lomba";
-import { getPendaftar } from "~~/server/utils/db/pendaftar";
+import { getPendaftarCountsByLombaBatch } from "~~/server/utils/db/pendaftar";
 
 export default defineEventHandler(async (event) => {
   await requireAuth(event);
-  const [lombaAll, allPendaftar] = await Promise.all([getLomba(true), getPendaftar()]);
-  // Pre-group pendaftar by lombaId so the per-lomba stats are O(M) total
-  // instead of O(N*M) when iterating lomba × filter.
-  const grouped = new Map<number, typeof allPendaftar>();
-  for (const p of allPendaftar) {
-    const arr = grouped.get(p.lombaId);
-    if (arr) arr.push(p);
-    else grouped.set(p.lombaId, [p]);
-  }
+  // Was: getPendaftar() loads ALL rows + 3× filter per lomba in JS. Now: 1
+  // batched GROUP BY (lomba_id, status) query, plus getLomba() in parallel.
+  const lombaAll = await getLomba(true);
+  const perLomba = await getPendaftarCountsByLombaBatch(lombaAll.map((l) => l.id));
   const items = lombaAll.map((l) => {
-    const ps = grouped.get(l.id) ?? [];
+    const c = perLomba.get(l.id) ?? { disetujui: 0, pending: 0, total: 0 };
     return {
       id: l.id, nama: l.nama, emoji: l.emoji, status: l.status,
       kategoriEligible: l.kategoriEligible,
-      count: ps.filter((p) => p.status === "disetujui").length,
-      pending: ps.filter((p) => p.status === "pending").length,
-      total: ps.filter((p) => p.status !== "ditolak").length,
+      count: c.disetujui,
+      pending: c.pending,
+      total: c.total,
     };
   });
   return { items };

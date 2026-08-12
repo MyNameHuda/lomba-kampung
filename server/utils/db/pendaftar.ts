@@ -17,6 +17,74 @@ export async function getPendaftar(): Promise<Pendaftar[]> {
   return toCamelAll<Pendaftar>(rows);
 }
 
+// =================== Filtered reads (avoid loading all rows) ===================
+
+// Read pendaftar filtered by status at SQL level. Pass `limit` for top-N queries.
+export async function getPendaftarByStatus(
+  status: PendaftarStatus,
+  limit?: number
+): Promise<Pendaftar[]> {
+  const sql = limit
+    ? "SELECT * FROM pendaftar WHERE status = $1 ORDER BY created_at DESC LIMIT $2"
+    : "SELECT * FROM pendaftar WHERE status = $1 ORDER BY created_at DESC";
+  const args = limit ? [status, limit] : [status];
+  return toCamelAll<Pendaftar>(await all<DbRow>(sql, ...args));
+}
+
+// Read recent pendaftar (any status), ordered by created_at DESC. For dashboard.
+export async function getRecentPendaftar(limit: number): Promise<Pendaftar[]> {
+  const rows = await all<DbRow>(
+    "SELECT * FROM pendaftar ORDER BY created_at DESC LIMIT $1",
+    limit
+  );
+  return toCamelAll<Pendaftar>(rows);
+}
+
+// Single-query count for ALL pendaftar statuses. Replaces 4 separate
+// countPendaftarByStatus() round-trips on the dashboard.
+export async function getPendaftarCountsByStatus(): Promise<{
+  total: number;
+  pending: number;
+  disetujui: number;
+  ditolak: number;
+}> {
+  const rows = await all<{ status: string; c: number }>(
+    "SELECT status, COUNT(*) as c FROM pendaftar GROUP BY status"
+  );
+  const out = { total: 0, pending: 0, disetujui: 0, ditolak: 0 };
+  for (const r of rows) {
+    const n = Number(r.c);
+    out.total += n;
+    if (r.status === "pending") out.pending = n;
+    else if (r.status === "disetujui") out.disetujui = n;
+    else if (r.status === "ditolak") out.ditolak = n;
+  }
+  return out;
+}
+
+// Batched per-lomba count by status. Returns { [lombaId]: { disetujui, pending, total } }
+// where total = all pendaftar except 'ditolak'. Single query for all lomba.
+export async function getPendaftarCountsByLombaBatch(
+  lombaIds: number[]
+): Promise<Map<number, { disetujui: number; pending: number; total: number }>> {
+  const map = new Map<number, { disetujui: number; pending: number; total: number }>();
+  for (const id of lombaIds) map.set(id, { disetujui: 0, pending: 0, total: 0 });
+  if (lombaIds.length === 0) return map;
+  const rows = await all<{ lomba_id: number; status: string; c: number }>(
+    "SELECT lomba_id, status, COUNT(*) as c FROM pendaftar WHERE lomba_id = ANY($1) GROUP BY lomba_id, status",
+    [lombaIds]
+  );
+  for (const r of rows) {
+    const m = map.get(Number(r.lomba_id));
+    if (!m) continue;
+    const n = Number(r.c);
+    if (r.status === "disetujui") m.disetujui = n;
+    else if (r.status === "pending") m.pending = n;
+    if (r.status !== "ditolak") m.total += n;
+  }
+  return map;
+}
+
 export async function getPendaftarByLomba(lombaId: number, status?: PendaftarStatus): Promise<Pendaftar[]> {
   const sql = status
     ? "SELECT * FROM pendaftar WHERE lomba_id = $1 AND status = $2 ORDER BY nomor"

@@ -1,6 +1,6 @@
 // GET /api/public/lomba/[id] — full data for public lomba detail page
 import { defineEventHandler, getRouterParam, createError } from "h3";
-import { getLombaById, getJuaraReadiness } from "~~/server/utils/db/lomba";
+import { getLombaById, getJuaraReadinessFromLomba } from "~~/server/utils/db/lomba";
 import { getKategori } from "~~/server/utils/db/kategori";
 import { groupPendaftarForLomba, getJuaraByLomba, getPendaftarByLomba } from "~~/server/utils/db/pendaftar";
 
@@ -14,11 +14,13 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: "Lomba tidak ditemukan" });
   }
 
+  // Pass `l` to readiness to skip the redundant getLombaById() round-trip
+  // (we already have the full lomba here, including kategoriEligible).
   const [kats, groups, juaraMap, readiness, allDisetujui] = await Promise.all([
     getKategori(),
     groupPendaftarForLomba(id),
     getJuaraByLomba(id),
-    getJuaraReadiness(id),
+    getJuaraReadinessFromLomba(l),
     getPendaftarByLomba(id, "disetujui"),
   ]);
 

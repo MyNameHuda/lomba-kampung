@@ -228,10 +228,20 @@ export async function getJuaraReadiness(lombaId: number): Promise<JuaraReadiness
   if (!lomba) {
     return { allReady: false, missingKategori: [], perKategori: {} };
   }
+  return getJuaraReadinessFromLomba(lomba);
+}
+
+// Variant that takes a pre-fetched lomba — avoids the redundant getLombaById()
+// round-trip when the caller already has the full lomba object. This matters
+// for endpoints that already fetched the lomba (e.g. /api/public/lomba/[id]).
+export async function getJuaraReadinessFromLomba(
+  lomba: { id: number; kategoriEligible?: string[] | null }
+): Promise<JuaraReadiness> {
   const perKategori: Record<string, { ju1: number; ju2: number; ju3: number }> = {};
   const missingKategori: string[] = [];
-  for (const katId of lomba.kategoriEligible) {
-    const counts = await countJuaraByKategori(lombaId, katId);
+  const eligible = Array.isArray(lomba.kategoriEligible) ? lomba.kategoriEligible : [];
+  for (const katId of eligible) {
+    const counts = await countJuaraByKategori(lomba.id, katId);
     perKategori[katId] = { ju1: counts[1], ju2: counts[2], ju3: counts[3] };
     if (counts[1] < 1 || counts[2] < 1) {
       missingKategori.push(katId);
