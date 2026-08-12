@@ -78,7 +78,12 @@ export default defineNuxtConfig({
   //     free plan's 15-conn pooler limit.
   //
   // (nitro config — defaults are fine; uncomment to tweak)
-  // nitro: { preset: "vercel" },
+  // Hardcode Vercel preset here. Setting via NITRO_PRESET env var alone
+  // is fragile (BOM chars in some shells can corrupt the preset name during
+  // build), and Vercel is the only deploy target for this project, so we
+  // bake it in. If you ever deploy elsewhere, comment this out + set the
+  // env var.
+  nitro: { preset: "vercel" },
 
   // TypeScript strict mode (matches Next TS config)
   typescript: {
