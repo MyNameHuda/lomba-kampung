@@ -438,6 +438,68 @@ export async function countJuaraByKategori(
   return out;
 }
 
+// Batched juara summary — single query for ALL (lomba, kategori) pairs.
+// Replaces the per-lomba loop in /api/admin/lomba that called
+// countJuaraByKategori 3-4 times per lomba (N×3 sequential queries).
+//
+// Caller passes the lomba list so we can use their `kategoriEligible` to
+// determine `allReady` without refetching each lomba.
+//
+// Returns: { [lombaId]: { totalJuara: number; allReady: boolean } }
+export async function getJuaraSummaryBatch(
+  lombaList: Array<{ id: number; kategoriEligible?: string[] | null }>
+): Promise<Record<number, { totalJuara: number; allReady: boolean }>> {
+  await ensureJuaraColumn();
+  const summary: Record<number, { totalJuara: number; allReady: boolean }> = {};
+  if (lombaList.length === 0) return summary;
+  for (const l of lombaList) {
+    summary[l.id] = { totalJuara: 0, allReady: true };
+  }
+
+  // One query, GROUP BY (lomba_id, kategori_id, juara_rank). Returns at most
+  // 3 rows per (lomba, kategori) that has winners.
+  const rows = await all<{ lomba_id: number; kategori_id: string; juara_rank: number; c: number }>(
+    `SELECT lomba_id, kategori_id, juara_rank, COUNT(*) as c
+     FROM pendaftar
+     WHERE juara_rank IS NOT NULL
+     GROUP BY lomba_id, kategori_id, juara_rank`,
+  );
+
+  // Build (lombaId, kategoriId) → { ju1, ju2, ju3 } pivot
+  const pivot = new Map<string, { ju1: number; ju2: number; ju3: number }>();
+  for (const r of rows) {
+    const key = `${r.lomba_id}|${r.kategori_id}`;
+    let cell = pivot.get(key);
+    if (!cell) {
+      cell = { ju1: 0, ju2: 0, ju3: 0 };
+      pivot.set(key, cell);
+    }
+    const rank = Number(r.juara_rank);
+    if (rank === 1) cell.ju1 = Number(r.c);
+    else if (rank === 2) cell.ju2 = Number(r.c);
+    else if (rank === 3) cell.ju3 = Number(r.c);
+    summary[Number(r.lomba_id)].totalJuara += Number(r.c);
+  }
+
+  // allReady = every eligible kategori has at least 1 ju1 AND 1 ju2
+  for (const l of lombaList) {
+    const eligible = Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [];
+    if (eligible.length === 0) {
+      // No eligible kategori — vacuously "ready" (no winners expected)
+      continue;
+    }
+    for (const katId of eligible) {
+      const cell = pivot.get(`${l.id}|${katId}`);
+      if (!cell || cell.ju1 < 1 || cell.ju2 < 1) {
+        summary[l.id].allReady = false;
+        break;
+      }
+    }
+  }
+
+  return summary;
+}
+
 // =================== Finalist (stage system v4) ===================
 export async function setFinalist(
   pendaftarId: number,
