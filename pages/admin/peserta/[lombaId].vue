@@ -210,7 +210,7 @@ const filterLabelStr = computed(() => {
         @click="exportImage"
       >
         <i :class="['fas', isExporting ? 'fa-spinner fa-spin' : 'fa-image']" />
-        {{ isExporting ? "Render..." : "Image" }}
+        <span class="hidden md:inline">{{ isExporting ? "Render..." : "Image" }}</span>
       </button>
       <DownloadExcelButton
         variant="btn-secondary"
@@ -219,7 +219,8 @@ const filterLabelStr = computed(() => {
         title="Download Excel peserta disetujui lomba ini"
       />
       <NuxtLink :to="`/admin/lomba/${lombaId}/juara`" class="btn btn-sm btn-primary" style="width: auto">
-        <i class="fas fa-trophy" /> Juara
+        <i class="fas fa-trophy" />
+        <span class="hidden md:inline">Juara</span>
       </NuxtLink>
     </template>
 
