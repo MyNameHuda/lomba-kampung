@@ -84,16 +84,16 @@ async function doLogout() {
 
     <main class="admin-main">
       <header class="admin-topbar">
-        <div class="flex items-center gap-3 flex-1 min-w-0">
+        <div class="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
           <button class="hamburger" aria-label="Buka menu" @click="open = !open">
             <i class="fas fa-bars" />
           </button>
-          <div class="min-w-0">
-            <div v-if="breadcrumb" class="text-[11px] text-[#6B7280] mb-0.5">{{ breadcrumb }}</div>
-            <div class="font-bold text-base">{{ title }}</div>
+          <div class="min-w-0 flex-1">
+            <div v-if="breadcrumb" class="text-[11px] text-[#6B7280] mb-0.5 truncate hidden sm:block">{{ breadcrumb }}</div>
+            <div class="font-bold text-base truncate">{{ title }}</div>
           </div>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
           <NuxtLink to="/" class="btn btn-secondary btn-sm" style="width: auto" title="Lihat halaman publik (tab ini)">
             <i class="fas fa-globe" />
             <span class="hidden md:inline">Halaman Publik</span>

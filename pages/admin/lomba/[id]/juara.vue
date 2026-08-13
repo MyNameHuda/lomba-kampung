@@ -379,7 +379,7 @@ async function selesaikanLomba() {
 </script>
 
 <template>
-  <AdminShell :title="`Juara — ${state?.lomba?.nama || ''}`" :breadcrumb="state?.lomba?.nama" active-nav="/admin/lomba">
+  <AdminShell :title="state?.lomba?.nama || 'Juara'" breadcrumb="Juara" active-nav="/admin/lomba">
     <template #actions>
       <span v-if="state?.lomba" class="phase-badge" :class="`status-${state.lomba.status}`">
         <i class="fas fa-circle" style="font-size: 6px" /> {{ state.lomba.status }}

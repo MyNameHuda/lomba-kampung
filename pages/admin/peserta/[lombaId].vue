@@ -196,7 +196,7 @@ const filterLabelStr = computed(() => {
 <template>
   <AdminShell
     :title="data?.lomba?.nama || 'Peserta'"
-    :breadcrumb="data?.lomba?.nama"
+    breadcrumb="Peserta"
     active-nav="/admin/peserta"
   >
     <template #actions>
