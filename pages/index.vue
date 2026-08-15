@@ -27,19 +27,30 @@ const isAdmin = computed(() => data.value?.isAdmin ?? false);
 
 const activeKat = ref<string | null>(null);
 const search = ref("");
+// Sort: "default" preserves the API's natural order (urutan, then id). "date"
+// sorts by the earliest jadwal tanggal across eligible kategori; lomba with
+// no jadwal are pushed to the end.
+const sortBy = ref<"default" | "date-asc" | "date-desc">("default");
 
 const katMap = computed(() => new Map<string, KategoriSlim>(kats.value.map((k) => [k.id, k] as const)));
 
-// Per-kategori peserta count, summed across lomba that use a kategori with
-// the same publicName (e.g. k_anak_l + k_anak_p both map to "Anak"). Sourced
-// from the API's per-kategori count, NOT computed from eligible kategori of
-// each lomba — the old logic showed "Balita (5)" = 5 lomba with Balita,
-// which confused users who expected "5 Balita peserta".
+// Per-publicName count of LOMBA (not peserta). A lomba contributes +1 to each
+// publicName it is eligible for — a single "Lomba Anak" with both k_anak_l and
+// k_anak_p eligible still counts as 1 Anak lomba, not 2, because the user
+// reads "Anak (5)" as "5 lomba, kategori Anak". The previous implementation
+// used the API's per-kategori peserta count which made "Anak (187)" mean 187
+// pendaftar — confusing on a filter chip.
 const countByPublicName = computed(() => {
   const m = new Map<string, number>();
-  for (const k of kats.value) {
-    const name = displayKategoriName(k.id, k as any);
-    m.set(name, (m.get(name) ?? 0) + (k.count ?? 0));
+  for (const l of lomba.value) {
+    const eligible = Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [];
+    const names = new Set<string>();
+    for (const kid of eligible) {
+      names.add(displayKategoriName(kid, katMap.value.get(kid)));
+    }
+    for (const n of names) {
+      m.set(n, (m.get(n) ?? 0) + 1);
+    }
   }
   return m;
 });
@@ -51,6 +62,7 @@ const availablePublicKats = computed(() => {
     const publicName = displayKategoriName(k.id, k);
     if (seen.has(publicName)) continue;
     seen.add(publicName);
+    // Show kategori in chip row only if at least 1 lomba is eligible for it.
     if ((countByPublicName.value.get(publicName) ?? 0) > 0) {
       out.push({ publicName, sample: k });
     }
@@ -58,9 +70,19 @@ const availablePublicKats = computed(() => {
   return out;
 });
 
+// Earliest jadwal timestamp across a lomba's eligible kategori. null when none
+// of the kategori have a tanggal set.
+function earliestJadwalTs(l: LombaSlim): number | null {
+  const withTanggal = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : [])
+    .map((kid) => l.jadwalByKategori?.[kid]?.tanggal)
+    .filter((t): t is number => typeof t === "number" && t > 0);
+  if (withTanggal.length === 0) return null;
+  return Math.min(...withTanggal);
+}
+
 const visibleLomba = computed(() => {
   const q = search.value.trim().toLowerCase();
-  return lomba.value.filter((l) => {
+  const filtered = lomba.value.filter((l) => {
     if (activeKat.value) {
       const hasMatch = (Array.isArray(l.kategoriEligible) ? l.kategoriEligible : []).some(
         (kid) => displayKategoriName(kid, katMap.value.get(kid)) === activeKat.value
@@ -70,6 +92,19 @@ const visibleLomba = computed(() => {
     if (q && !l.nama.toLowerCase().includes(q)) return false;
     return true;
   });
+  // Apply sort. date-asc/date-desc push null-tanggal lomba to the bottom
+  // regardless of direction so "belum dijadwalkan" never clutters the top.
+  if (sortBy.value === "default") return filtered;
+  const sorted = [...filtered];
+  sorted.sort((a, b) => {
+    const ta = earliestJadwalTs(a);
+    const tb = earliestJadwalTs(b);
+    if (ta == null && tb == null) return 0;
+    if (ta == null) return 1; // null → always last
+    if (tb == null) return -1;
+    return sortBy.value === "date-asc" ? ta - tb : tb - ta;
+  });
+  return sorted;
 });
 
 const isFiltered = computed(() => search.value.trim() !== "" || activeKat.value !== null);
@@ -259,6 +294,44 @@ const displayedPesertaCount = useCountUp(computed(() => totalPeserta.value));
             {{ publicName }} ({{ countByPublicName.get(publicName) ?? 0 }})
           </button>
         </div>
+      </div>
+
+      <!-- Sort row: dropdown to sort by lomba date. Sits BELOW the chip row so
+           the horizontal scroll on chips stays uncluttered; the chip row already
+           has its own scroll container. -->
+      <div class="flex items-center gap-2 mt-2 anim-fade-up" style="animation-delay: 180ms">
+        <span class="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">Sort</span>
+        <div class="inline-flex rounded-full border-2 border-[#E5E7EB] bg-white overflow-hidden text-[11px] font-semibold">
+          <button
+            type="button"
+            :class="['px-3 py-1.5 transition-colors', sortBy === 'default' ? 'bg-primary text-white' : 'text-[#6B7280] hover:text-primary']"
+            @click="sortBy = 'default'"
+          >
+            <i class="fas fa-layer-group text-[9px]" /> Default
+          </button>
+          <button
+            type="button"
+            :class="['px-3 py-1.5 border-l-2 transition-colors', sortBy === 'date-asc' ? 'bg-primary text-white border-primary' : 'text-[#6B7280] hover:text-primary border-[#E5E7EB]']"
+            @click="sortBy = 'date-asc'"
+          >
+            <i class="far fa-calendar-alt text-[9px]" /> Terdekat
+          </button>
+          <button
+            type="button"
+            :class="['px-3 py-1.5 border-l-2 transition-colors', sortBy === 'date-desc' ? 'bg-primary text-white border-primary' : 'text-[#6B7280] hover:text-primary border-[#E5E7EB]']"
+            @click="sortBy = 'date-desc'"
+          >
+            <i class="far fa-calendar-alt text-[9px]" /> Terjauh
+          </button>
+        </div>
+        <button
+          v-if="sortBy !== 'default'"
+          type="button"
+          class="text-[10px] text-[#9CA3AF] hover:text-primary font-semibold inline-flex items-center gap-1"
+          @click="sortBy = 'default'"
+        >
+          <i class="fas fa-undo" /> Reset
+        </button>
       </div>
 
       <!-- Result count + reset -->
