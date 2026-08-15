@@ -112,60 +112,6 @@ async function toggleStatus(l: any) {
   }
 }
 
-// =================== Copy Peserta (lomba → lomba, auto-approved) ===================
-// Lets admin bulk-copy `disetujui` peserta from one lomba to another without
-// going through the approval flow. Useful when a similar lomba is created
-// mid-event and the existing peserta should also be registered for it.
-//
-// The target is the lomba whose card the user clicked "Salin" on. Source is
-// picked from a list of OTHER lomba that share at least one kategori — so
-// only eligible peserta will be copied (kategori filter is enforced server-side).
-const copyTarget = ref<any | null>(null);
-const copySourceId = ref<number | null>(null);
-const copying = ref(false);
-const copySourceSearch = ref("");
-
-const copySourceOptions = computed(() => {
-  if (!copyTarget.value) return [];
-  const targetEligible = new Set<string>(copyTarget.value.kategoriEligible || []);
-  const q = copySourceSearch.value.trim().toLowerCase();
-  return items.value
-    .filter((l: any) => l.id !== copyTarget.value.id && (l.status === "aktif" || l.status === "selesai"))
-    .filter((l: any) => Array.isArray(l.kategoriEligible) && l.kategoriEligible.some((kid: string) => targetEligible.has(kid)))
-    .filter((l: any) => !q || l.nama.toLowerCase().includes(q))
-    .sort((a: any, b: any) => (counts.value[b.id] || 0) - (counts.value[a.id] || 0));
-});
-
-function openCopy(l: any) {
-  copyTarget.value = l;
-  copySourceId.value = null;
-  copySourceSearch.value = "";
-}
-function closeCopy() {
-  copyTarget.value = null;
-  copySourceId.value = null;
-  copySourceSearch.value = "";
-}
-async function runCopy() {
-  if (!copyTarget.value || !copySourceId.value) return;
-  copying.value = true;
-  try {
-    const res: any = await $fetch(`/api/admin/lomba/${copyTarget.value.id}/copy-from`, {
-      method: "POST",
-      body: { sourceLombaId: copySourceId.value },
-      credentials: "include",
-    });
-    notify.success(`${res.copied} disalin · ${res.skippedDuplicate} duplikat · ${res.skippedKategori} kategori skip`);
-    closeCopy();
-    await refresh();
-    items.value = data.value?.lomba ?? [];
-  } catch (e: any) {
-    notify.error(e?.data?.statusMessage || "Gagal salin peserta");
-  } finally {
-    copying.value = false;
-  }
-}
-
 // Dedupe jadwal across a group of kategori IDs (e.g. k_anak_l + k_anak_p
 // collapsed under "Anak" both share the same tanggal — render only once).
 // If L and P have different tanggal, both are shown (sorted ascending).
@@ -318,9 +264,6 @@ function uniqueJadwalsForGroup(l: any, kategoriIds: string[]) {
           <NuxtLink :to="`/admin/lomba/${l.id}/juara`" class="icon-action success" title="Pilih juara">
             <i class="fas fa-trophy" />
           </NuxtLink>
-          <button class="icon-action" title="Salin peserta dari lomba lain (auto-approved)" @click="openCopy(l)">
-            <i class="fas fa-copy" />
-          </button>
           <button class="icon-action" title="Edit" @click="openEdit(l)">
             <i class="fas fa-pen" />
           </button>
@@ -333,65 +276,6 @@ function uniqueJadwalsForGroup(l: any, kategoriIds: string[]) {
 
     <!-- Lomba Modal -->
     <LombaModal v-if="creating || editing" :editing="editing" :kats="kats" :next-urutan="(items.length || 0) + 1" @close="closeModal" @save="saveLomba" />
-
-    <!-- Copy Peserta Modal -->
-    <Teleport to="body">
-      <div v-if="copyTarget" class="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/50" @click="closeCopy">
-        <div class="bg-white rounded-2xl max-w-[480px] w-full max-h-[90vh] overflow-hidden flex flex-col" @click.stop>
-          <div class="p-5 border-b border-[#E5E7EB] flex items-center justify-between flex-shrink-0">
-            <h3 class="text-base font-bold flex items-center gap-2">
-              <i class="fas fa-copy text-primary" /> Salin Peserta
-            </h3>
-            <button class="w-8 h-8 rounded-full bg-[#F9FAFB] text-[#6B7280] flex items-center justify-center hover:bg-[#E5E7EB]" @click="closeCopy">
-              <i class="fas fa-xmark" />
-            </button>
-          </div>
-          <div class="p-5 overflow-y-auto space-y-3 flex-1">
-            <p class="text-[13px] text-[#6B7280] leading-relaxed">
-              Salin peserta <strong>disetujui</strong> dari lomba lain ke <strong>{{ copyTarget.nama }}</strong>.
-              Peserta yang di-copy akan langsung <strong>disetujui</strong> (tidak perlu approval lagi).
-            </p>
-            <div>
-              <label class="label">Cari lomba sumber</label>
-              <div class="relative">
-                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] text-sm" />
-                <input v-model="copySourceSearch" type="text" placeholder="Cari nama lomba..." class="w-full pl-9 pr-3 py-2 border border-[#E5E7EB] rounded-lg text-sm bg-white" />
-              </div>
-            </div>
-            <div>
-              <label class="label">Pilih lomba sumber</label>
-              <p v-if="copySourceOptions.length === 0" class="text-[12px] text-[#9CA3AF] italic">
-                Tidak ada lomba lain dengan kategori yang sama
-              </p>
-              <div v-else class="space-y-1.5 max-h-[280px] overflow-y-auto">
-                <button
-                  v-for="s in copySourceOptions"
-                  :key="s.id"
-                  type="button"
-                  :class="['w-full text-left px-3 py-2 border-2 rounded-lg text-sm transition-all flex items-center gap-2', copySourceId === s.id ? 'border-primary bg-primary-light' : 'bg-white border-[#E5E7EB] hover:border-primary']"
-                  @click="copySourceId = s.id"
-                >
-                  <span class="text-base">{{ s.emoji || "🏆" }}</span>
-                  <span class="flex-1 min-w-0">
-                    <span class="font-semibold block truncate">{{ s.nama }}</span>
-                    <span class="text-[11px] text-[#6B7280]">{{ counts[s.id] || 0 }} peserta disetujui</span>
-                  </span>
-                  <i v-if="copySourceId === s.id" class="fas fa-check-circle text-primary" />
-                </button>
-              </div>
-            </div>
-          </div>
-          <div class="p-3 border-t border-[#E5E7EB] flex gap-2 justify-end flex-shrink-0 bg-[#F9FAFB]">
-            <button class="btn btn-secondary" style="width: auto" @click="closeCopy">Batal</button>
-            <button class="btn btn-primary" style="width: auto" :disabled="!copySourceId || copying" @click="runCopy">
-              <i v-if="copying" class="fas fa-spinner fa-spin" />
-              <i v-else class="fas fa-copy" />
-              {{ copying ? "Menyalin..." : "Salin Peserta" }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </AdminShell>
 </template>
 

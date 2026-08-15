@@ -218,6 +218,11 @@ export async function bulkCopyPendaftar(
       skippedDuplicate++;
       continue;
     }
+    // Auto-approve the copy: source rows are already `disetujui` (line 198
+    // filtered for that) and the user is explicitly asking to copy them
+    // across lomba, so re-approving each one would be a meaningless click.
+    // `sumber: "manual"` keeps the row tagged as a copy (vs "publik" from
+    // the public form) so the input-manual UI can style it differently.
     const result = await createPendaftar({
       nama: src.nama,
       jenisKelamin: src.jenisKelamin,
@@ -225,6 +230,7 @@ export async function bulkCopyPendaftar(
       umur: src.umur,
       lombaId: targetLombaId,
       sumber: "manual",
+      status: "disetujui",
       hadir: true,
     });
     copiedIds.push(result.id);
