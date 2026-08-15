@@ -30,16 +30,16 @@ const search = ref("");
 
 const katMap = computed(() => new Map<string, KategoriSlim>(kats.value.map((k) => [k.id, k] as const)));
 
+// Per-kategori peserta count, summed across lomba that use a kategori with
+// the same publicName (e.g. k_anak_l + k_anak_p both map to "Anak"). Sourced
+// from the API's per-kategori count, NOT computed from eligible kategori of
+// each lomba — the old logic showed "Balita (5)" = 5 lomba with Balita,
+// which confused users who expected "5 Balita peserta".
 const countByPublicName = computed(() => {
   const m = new Map<string, number>();
-  for (const l of lomba.value) {
-    const publicNames = new Set<string>();
-    for (const kid of Array.isArray(l.kategoriEligible) ? l.kategoriEligible : []) {
-      publicNames.add(displayKategoriName(kid, katMap.value.get(kid)));
-    }
-    for (const name of publicNames) {
-      m.set(name, (m.get(name) ?? 0) + 1);
-    }
+  for (const k of kats.value) {
+    const name = displayKategoriName(k.id, k as any);
+    m.set(name, (m.get(name) ?? 0) + (k.count ?? 0));
   }
   return m;
 });

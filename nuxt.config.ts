@@ -85,18 +85,20 @@ export default defineNuxtConfig({
   // env var.
   nitro: { preset: "vercel" },
 
-  // Route rules — cache the home page (lomba list + counts, slow-changing)
-  // for 60s to absorb traffic spikes. The /lomba/** detail pages are NOT
-  // cached: per-lomba peserta list changes whenever admin approves a new
-  // entry, so any stale HTML makes the public page look "out of sync" with
-  // the admin actions. The detail API still has s-maxage=30 for downstream
-  // caching. With sin1 region, SSR cost is ~100-300ms warm so no caching
-  // is fine even for repeat visitors.
+  // Route rules — public pages are NOT cached at the HTML level. Per-lomba
+  // counts and the public peserta list change every time admin approves or
+  // adds a peserta, and a stale "7 Peserta" badge is a much worse UX than
+  // a 100-300ms SSR roundtrip on repeat visits. With sin1 region the
+  // function cold start is ~1s and warm is ~100-300ms, which is acceptable
+  // for a low-traffic event app.
   //
   // The /api/public/* paths are intentionally NOT cached because the admin UI
   // re-fetches them on every interaction and the cached HTML would be stale.
+  // API endpoints set their own Cache-Control: public, s-maxage=N headers
+  // (30s for public lists, 30s for lomba detail) to absorb client-side
+  // repeat requests within a short window.
   routeRules: {
-    "/": { swr: 60 },
+    "/": { swr: 0 },
     "/lomba/**": { swr: 0 },
   },
 

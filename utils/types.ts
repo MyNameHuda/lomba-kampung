@@ -11,6 +11,7 @@ export type KategoriSlim = {
   icon?: string;
   min?: number;
   max?: number;
+  count?: number;
   urutan?: number;
   autoAge?: boolean;
   colorBg?: string;
