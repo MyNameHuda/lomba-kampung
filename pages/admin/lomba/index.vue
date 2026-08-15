@@ -112,6 +112,35 @@ async function toggleStatus(l: any) {
   }
 }
 
+// Selesaikan perlombaan via the dedicated /selesai endpoint, which gates on
+// juara readiness (Juara 1+2 must exist in every eligible kategori). This is
+// the canonical "finalize" flow — the toggleStatus() path above is a quick
+// status flip that skips readiness checks. After a successful finalize, we
+// re-fetch so juaraSummary + counts stay in sync.
+async function selesaikanLomba(l: any) {
+  const ready = juaraSummary.value[l.id]?.allReady;
+  const ok = await notify.confirm({
+    title: "Selesaikan Perlombaan",
+    message: ready
+      ? `Yakin selesaikan "${l.nama}"?\n\nJuara 1+2+3 diumumkan ke publik. Tidak bisa di-undo.`
+      : `Yakin selesaikan "${l.nama}" sekarang?\n\n⚠️ Juara 1/2 belum lengkap di beberapa kategori. Status akan di-pin ke "Selesai" namun publik mungkin melihat kategori tanpa Juara 1/2.`,
+    confirmText: "Selesaikan",
+    variant: "danger",
+  });
+  if (!ok) return;
+  busy.value = l.id;
+  try {
+    await $fetch(`/api/admin/lomba/${l.id}/selesai`, { method: "POST", credentials: "include" });
+    notify.success(`Perlombaan "${l.nama}" diselesaikan`);
+    await refresh();
+    items.value = data.value?.lomba ?? [];
+  } catch (e: any) {
+    notify.error(e?.data?.statusMessage || "Gagal selesaikan perlombaan");
+  } finally {
+    busy.value = null;
+  }
+}
+
 // Dedupe jadwal across a group of kategori IDs (e.g. k_anak_l + k_anak_p
 // collapsed under "Anak" both share the same tanggal — render only once).
 // If L and P have different tanggal, both are shown (sorted ascending).
@@ -264,6 +293,17 @@ function uniqueJadwalsForGroup(l: any, kategoriIds: string[]) {
           <NuxtLink :to="`/admin/lomba/${l.id}/juara`" class="icon-action success" title="Pilih juara">
             <i class="fas fa-trophy" />
           </NuxtLink>
+          <button
+            v-if="l.status === 'aktif'"
+            type="button"
+            class="icon-action"
+            :class="juaraSummary[l.id]?.allReady ? 'success' : 'warn'"
+            :title="juaraSummary[l.id]?.allReady ? 'Selesaikan perlombaan (juara siap)' : 'Selesaikan perlombaan (juara belum lengkap)'"
+            :disabled="busy === l.id"
+            @click="selesaikanLomba(l)"
+          >
+            <i class="fas fa-flag-checkered" />
+          </button>
           <button class="icon-action" title="Edit" @click="openEdit(l)">
             <i class="fas fa-pen" />
           </button>
