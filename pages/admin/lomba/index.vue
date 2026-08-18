@@ -141,6 +141,32 @@ async function selesaikanLomba(l: any) {
   }
 }
 
+// Buka kembali lomba yang sudah selesai. Status flip selesai → aktif via
+// PATCH (the same path toggleStatus() uses, but inverted). Use case: admin
+// realizes they picked the wrong juara after finalizing — they reopen, fix
+// the winners on /admin/lomba/[id]/juara, then re-selesaikan. Juara page
+// auto-unlocks when status flips back to "aktif" (it checks isLocked via the
+// lomba.status field, see juara.vue).
+async function bukaKembaliLomba(l: any) {
+  const ok = await notify.confirm({
+    title: "Buka Kembali Lomba",
+    message: `Buka kembali "${l.nama}"?\n\nStatus kembali ke "Aktif". Juara yang sudah diumumkan ke publik akan tersembunyi lagi sampai Anda selesaikan ulang lomba ini.`,
+    confirmText: "Buka Kembali",
+    variant: "default",
+  });
+  if (!ok) return;
+  busy.value = l.id;
+  try {
+    await $fetch(`/api/admin/lomba/${l.id}`, { method: "PATCH", body: { status: "aktif" }, credentials: "include" });
+    items.value = items.value.map((x: any) => x.id === l.id ? { ...x, status: "aktif" } : x);
+    notify.success(`"${l.nama}" dibuka kembali — juara bisa diedit ulang`);
+  } catch {
+    notify.error("Gagal buka kembali lomba");
+  } finally {
+    busy.value = null;
+  }
+}
+
 // Dedupe jadwal across a group of kategori IDs (e.g. k_anak_l + k_anak_p
 // collapsed under "Anak" both share the same tanggal — render only once).
 // If L and P have different tanggal, both are shown (sorted ascending).
@@ -303,6 +329,16 @@ function uniqueJadwalsForGroup(l: any, kategoriIds: string[]) {
             @click="selesaikanLomba(l)"
           >
             <i class="fas fa-flag-checkered" />
+          </button>
+          <button
+            v-else-if="l.status === 'selesai'"
+            type="button"
+            class="icon-action info"
+            title="Buka kembali lomba (juara bisa diedit ulang)"
+            :disabled="busy === l.id"
+            @click="bukaKembaliLomba(l)"
+          >
+            <i class="fas fa-lock-open" />
           </button>
           <button class="icon-action" title="Edit" @click="openEdit(l)">
             <i class="fas fa-pen" />
