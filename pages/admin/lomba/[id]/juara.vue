@@ -376,6 +376,34 @@ async function selesaikanLomba() {
     busyAction.value = null;
   }
 }
+
+// =================== Buka Kembali Lomba ===================
+// Reverse of selesaikanLomba(). PATCH status → "aktif" so admin can fix
+// juara picks after finalizing. Halaman auto-unlocks because the whole
+// template gates edit/select actions on isLocked (status === "selesai").
+// Same PATCH endpoint the toggle on Manajemen Lomba page uses.
+async function bukaKembaliLomba() {
+  const ok = await notify.confirm({
+    title: "Buka Kembali Lomba",
+    message: "Buka kembali lomba ini?\n\nStatus kembali ke \"Aktif\". Juara yang sudah tampil di publik akan tersembunyi lagi sampai Anda selesaikan ulang lomba.",
+    confirmText: "Buka Kembali",
+    variant: "default",
+  });
+  if (!ok) return;
+  busyAction.value = "reopen";
+  try {
+    await $fetch(`/api/admin/lomba/${lombaId.value}`, { method: "PATCH", body: { status: "aktif" }, credentials: "include" });
+    state.value = { ...state.value, lomba: { ...state.value.lomba, status: "aktif" } };
+    // Re-fetch so readiness + juara picks reload with the new (unlocked) state.
+    await refresh();
+    state.value = data.value;
+    notify.success("Lomba dibuka kembali — juara bisa diedit ulang");
+  } catch (e: any) {
+    notify.error(e?.data?.statusMessage || "Gagal buka kembali lomba");
+  } finally {
+    busyAction.value = null;
+  }
+}
 </script>
 
 <template>
@@ -655,6 +683,17 @@ async function selesaikanLomba() {
         </div>
         <button class="btn btn-primary" style="width: auto" :disabled="!state.readiness?.allReady || busyAction === 'selesai'" @click="selesaikanLomba">
           <i class="fas fa-flag-checkered" /> Selesaikan Lomba
+        </button>
+      </div>
+
+      <!-- Buka Kembali Lomba (reverse — muncul setelah lomba di-selesai-kan) -->
+      <div v-if="state && isLocked" class="mt-5 card p-4 flex items-center justify-between flex-wrap gap-3 border-l-4 border-l-amber-400">
+        <div class="flex-1 min-w-0">
+          <h3 class="text-sm font-bold text-[#1F2937]">Lomba Sudah Selesai</h3>
+          <p class="text-[12px] text-[#6B7280] mt-0.5">Juara tampil di publik. Kalau ada kesalahan input juara, buka kembali lomba untuk edit, lalu selesaikan ulang.</p>
+        </div>
+        <button class="btn btn-secondary" style="width: auto" :disabled="busyAction === 'reopen'" @click="bukaKembaliLomba">
+          <i class="fas fa-lock-open" /> Buka Kembali
         </button>
       </div>
     </template>
